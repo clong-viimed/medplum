@@ -504,6 +504,10 @@ Binary resources cannot use compartment-based access controls. They require expl
       "criteria": "Communication?_compartment=%patient"
     },
     {
+      "resourceType": "HealthcareService",
+      "readonly": true
+    },
+    {
       "resourceType": "Organization",
       "readonly": true
     },
