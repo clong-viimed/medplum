@@ -71,13 +71,15 @@ interface ShardSyncStats {
  * Drains the shard_sync_outbox table on the specified shard and replicates
  * resources to the global shard.
  * @param job - The shard sync job details.
+ * @returns The stats of the shard sync job.
  */
-export async function execShardSyncJob(job: Job<ShardSyncJobData>): Promise<void> {
+export async function execShardSyncJob(job: Job<ShardSyncJobData>): Promise<ShardSyncStats> {
   const shardId = job.data.shardId;
+  const stats: ShardSyncStats = { processed: 0, skipped: 0, deleted: 0, expunged: 0, deadletter: 0, errors: 0 };
 
   if (shardId === GLOBAL_SHARD_ID) {
     globalLogger.info('Shard sync not allowed against the global shard');
-    return;
+    return stats;
   }
   const sourceRepo = getShardSystemRepo(shardId);
   const destinationRepo = getGlobalSystemRepo();
@@ -90,10 +92,8 @@ export async function execShardSyncJob(job: Job<ShardSyncJobData>): Promise<void
   const errorThreshold = config?.globalErrorThreshold ?? 3;
   const maxAttempts = config?.maxAttempts ?? 10;
 
-  const stats: ShardSyncStats = { processed: 0, skipped: 0, deleted: 0, expunged: 0, deadletter: 0, errors: 0 };
-
   for (let i = 0; i < maxIterations; i++) {
-    const count = await processOneBatch(sourceRepo, destinationRepo, batchSize, errorThreshold, maxAttempts, stats);
+    const count = await processBatch(sourceRepo, destinationRepo, batchSize, errorThreshold, maxAttempts, stats);
     if (count === 0) {
       break;
     }
@@ -103,6 +103,7 @@ export async function execShardSyncJob(job: Job<ShardSyncJobData>): Promise<void
   }
 
   globalLogger.info('Shard sync complete', { shardId, stats });
+  return stats;
 }
 
 interface OutboxRow {
@@ -119,7 +120,7 @@ interface ShardResourceRow {
   projectId: string;
   lastUpdated: Date;
   // history columns
-  versionId: string | null;
+  historyVersionId: string | null;
   historyContent: string | null;
 }
 
@@ -130,7 +131,7 @@ interface DeduplicatedEntry {
 }
 
 /**
- * Processes one batch of outbox rows from the shard.
+ * Processes a batch of outbox rows from the shard.
  * Claims rows with FOR UPDATE SKIP LOCKED, reads resource content from the shard,
  * writes to global, and cleans up outbox rows.
  * @param sourceRepo - The source repository to read from.
@@ -141,7 +142,7 @@ interface DeduplicatedEntry {
  * @param stats - Mutable stats accumulator.
  * @returns The number of outbox rows claimed (0 = outbox is empty or fully locked).
  */
-async function processOneBatch(
+async function processBatch(
   sourceRepo: SystemRepository,
   destinationRepo: SystemRepository,
   batchSize: number,
@@ -192,7 +193,7 @@ async function processOneBatch(
       const builder = new SqlBuilder(
         `SELECT DISTINCT ON (r.id)
           r."id", r."content", r."deleted", r."projectId", r."lastUpdated",
-          h."versionId", h."content" as "historyContent"
+          h."versionId" as "historyVersionId", h."content" as "historyContent"
           FROM "${resourceType}" as r JOIN "${resourceType}_History" as h ON r.id = h.id
           WHERE r.id = ANY($1) ORDER BY r.id, h."lastUpdated" DESC`,
         [ids]
@@ -228,7 +229,7 @@ async function processOneBatch(
         }
 
         if (shardResource.deleted) {
-          if (!shardResource.versionId) {
+          if (!shardResource.historyVersionId) {
             globalLogger.error('[SHARD SYNC] versionId not found for deleted resource', {
               resource: `${entry.resourceType}/${entry.resourceId}`,
             });
@@ -245,7 +246,7 @@ async function processOneBatch(
               entry.resourceId,
               shardResource.lastUpdated,
               shardResource.projectId,
-              shardResource.versionId
+              shardResource.historyVersionId
             );
             successOutboxIds.push(...entry.outboxIds);
             stats.deleted++;
@@ -351,11 +352,6 @@ async function processOneBatch(
   });
 }
 
-/**
- * Returns the shard sync queue instance.
- * This is used by the unit tests.
- * @returns The shard sync queue (if available).
- */
 export function getShardSyncQueue(): Queue<ShardSyncJobData> | undefined {
   return queueRegistry.get(queueName);
 }
@@ -371,14 +367,13 @@ async function addShardSyncJobData(jobData: ShardSyncJobData, opts?: JobsOptions
   });
 }
 
-export interface ShardSyncJobOptions {}
-
-export async function addShardSyncJob(shardId: string, options?: ShardSyncJobOptions): Promise<Job<ShardSyncJobData>> {
-  const jobData = prepareShardSyncJobData(shardId, options);
-  return addShardSyncJobData(jobData, { delay: 2000 });
+export async function addShardSyncJob(shardId: string): Promise<Job<ShardSyncJobData>> {
+  const jobData = prepareShardSyncJobData(shardId);
+  // Delay in conjunction with deduplication above to debounce the shard-sync worker since sync jobs tend to be bursty
+  return addShardSyncJobData(jobData, { delay: 1000 });
 }
 
-export function prepareShardSyncJobData(shardId: string, _options?: ShardSyncJobOptions): ShardSyncJobData {
+export function prepareShardSyncJobData(shardId: string): ShardSyncJobData {
   const ctx = tryGetRequestContext();
 
   return {
