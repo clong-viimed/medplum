@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { createReference, generateId } from '@medplum/core';
-import type { HealthcareService, Practitioner, Project, Schedule } from '@medplum/fhirtypes';
+import type { CodeableConcept, HealthcareService, Practitioner, Project, Schedule } from '@medplum/fhirtypes';
 import { chooseSchedulingParameters, parseSchedulingParametersExtensions } from './scheduling-parameters';
 
 describe('parseSchedulingParametersExtensions', () => {
@@ -640,6 +640,9 @@ describe('chooseSchedulingParameters', () => {
   const consultType = { coding: [{ system: 'http://example.com', code: 'consult' }] };
   const consultToken = 'http://example.com|consult';
 
+  const otherType = { coding: [{ system: 'http://example.com', code: 'other' }] };
+  const otherToken = 'http://example.com|other';
+
   // Reusable availability extension for Schedule resources (required on Schedule, not on HealthcareService)
   const mondayAvailability = {
     url: 'availability',
@@ -663,10 +666,10 @@ describe('chooseSchedulingParameters', () => {
     };
   }
 
-  function makeHealthcareService(duration: number): HealthcareService {
+  function makeHealthcareService(duration: number, serviceType?: CodeableConcept): HealthcareService {
     return {
       resourceType: 'HealthcareService',
-      type: [consultType],
+      type: [serviceType ?? consultType],
       availableTime: [{ daysOfWeek: ['mon', 'tue'], availableStartTime: '09:00:00', availableEndTime: '17:00:00' }],
       extension: [
         {
@@ -678,19 +681,23 @@ describe('chooseSchedulingParameters', () => {
   }
 
   test('returns [] when neither Schedule nor HealthcareService match the token', () => {
-    expect(chooseSchedulingParameters(makeSchedule(), [], ['http://example.com|no-match'])).toEqual([]);
+    expect(chooseSchedulingParameters([makeSchedule()], [], ['http://example.com|no-match'])).toEqual([]);
   });
 
   test('returns [] when no service type tokens are given', () => {
-    expect(chooseSchedulingParameters(makeSchedule(), [makeHealthcareService(30)], [])).toEqual([]);
+    expect(chooseSchedulingParameters([makeSchedule()], [makeHealthcareService(30)], [])).toEqual([]);
   });
 
   test('falls back to HealthcareService when Schedule has no matching parameters', () => {
-    const result = chooseSchedulingParameters(makeSchedule(), [makeHealthcareService(30)], [consultToken]);
+    const schedule = makeSchedule();
+    const healthcareService = makeHealthcareService(30);
+    const serviceExtension = parseSchedulingParametersExtensions(healthcareService)[0];
+    const result = chooseSchedulingParameters([schedule], [healthcareService], [consultToken]);
 
     expect(result).toHaveLength(1);
     expect(result[0][0].duration).toBe(30);
-    expect(result[0][1]).toMatchObject(consultType);
+    expect(result[0][0].serviceType).toMatchObject(consultType);
+    expect([...result[0][1].entries()]).toEqual([[schedule, serviceExtension]]);
   });
 
   test('Schedule-specific parameters take priority over HealthcareService', () => {
@@ -705,21 +712,27 @@ describe('chooseSchedulingParameters', () => {
       },
     ]);
     // HealthcareService says 30 min — Schedule's 60 min should win
-    const result = chooseSchedulingParameters(schedule, [makeHealthcareService(30)], [consultToken]);
+    const result = chooseSchedulingParameters([schedule], [makeHealthcareService(30)], [consultToken]);
 
     expect(result).toHaveLength(1);
     expect(result[0][0].duration).toBe(60);
   });
 
-  test('multiple HealthcareServices each contribute when they match the token', () => {
+  test('multiple HealthcareServices each contribute when they each match a token', () => {
+    const schedule = makeSchedule();
+    const consultService = makeHealthcareService(30, consultType);
+    const otherService = makeHealthcareService(60, otherType);
+
     const result = chooseSchedulingParameters(
-      makeSchedule(),
-      [makeHealthcareService(30), makeHealthcareService(60)],
-      [consultToken]
+      [makeSchedule()],
+      [consultService, otherService],
+      [consultToken, otherToken]
     );
 
     expect(result).toHaveLength(2);
     expect(result.map((r) => r[0].duration)).toEqual(expect.arrayContaining([30, 60]));
+    expect([...result[0][1].entries()]).toEqual([[schedule, parseSchedulingParametersExtensions(consultService)[0]]]);
+    expect([...result[1][1].entries()]).toEqual([[schedule, parseSchedulingParametersExtensions(otherService)[0]]]);
   });
 
   test('only the matching Schedule entry is returned when multiple extensions exist', () => {
@@ -743,10 +756,10 @@ describe('chooseSchedulingParameters', () => {
       },
     ]);
 
-    const result = chooseSchedulingParameters(schedule, [], [consultToken]);
+    const result = chooseSchedulingParameters([schedule], [], [consultToken]);
 
     expect(result).toHaveLength(1);
     expect(result[0][0].duration).toBe(60);
-    expect(result[0][1]).toMatchObject(consultType);
+    expect(result[0][0].serviceType).toMatchObject(consultType);
   });
 });

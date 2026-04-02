@@ -9,6 +9,7 @@ import type {
   Period,
   Schedule,
 } from '@medplum/fhirtypes';
+import { invariant } from '../../../util/invariant';
 
 const SchedulingParametersURI = 'https://medplum.com/fhir/StructureDefinition/SchedulingParameters';
 
@@ -86,6 +87,15 @@ export type SchedulingParameters = {
   timezone?: string;
 };
 
+type CommonSchedulingParameters = {
+  duration: number;
+  alignmentInterval: number;
+  alignmentOffset: number;
+  serviceType: CodeableConcept;
+};
+
+type SchedulingParameterGroup = [CommonSchedulingParameters, Map<Schedule, SchedulingParameters>];
+
 function durationToMinutes(duration: Duration): number {
   const { value, unit } = duration;
   if (value === undefined) {
@@ -135,62 +145,107 @@ function exactlyZero(arr: unknown[], attribute: string, resourceType: string): v
   }
 }
 
+function allMatch(values: unknown[]): boolean {
+  const first = values[0];
+  return values.every((value) => value === first);
+}
+
 /**
- * Given a Schedule, HealthcareServices, and an array of input service type
- * tokens, return [SchedulingParameters, serviceType] pairs that satisfy the
- * requested service types.
+ * Given Schedules, HealthcareServices, and an array of input service type
+ * tokens, return an array of [CommonSchedulingParameters, Map<Schedule,
+ * SchedulingParameters>] pairs that satisfy the requested service types.
  *
- * Priority order (highest to lowest):
+ * Priority order for each Schedule: (highest to lowest):
  *  1. Entries from the Schedule matching a requested service-type
  *  2. Entries from HealthcareService matching a requested service-type
  *
- * Each SchedulingParameters description is returned at most once. If matches are found at a given
- * priority level, lower-priority levels are not returned.
+ * If matches are found at a given priority level, lower-priority levels are not returned.
  *
- * @param schedule - The schedule resource to consider
+ * @param schedules - The schedule resources to consider
  * @param healthcareServices - HealthcareServices to consider
  * @param serviceTypeTokens - Service type tokens to restrict scheduling parameters to
  * @returns pairs of [SchedulingParameters, CodeableConcept]
  */
 export function chooseSchedulingParameters(
-  schedule: Schedule,
+  schedules: Schedule[],
   healthcareServices: HealthcareService[],
   serviceTypeTokens: string[]
-): (readonly [SchedulingParameters, CodeableConcept])[] {
-  const scheduleSchedulingParameters = parseSchedulingParametersExtensions(schedule);
+): SchedulingParameterGroup[] {
+  const allSchedulingParameters = schedules.map((schedule) => parseSchedulingParametersExtensions(schedule));
 
-  // Top priority: entries on an individual schedule matching a service type
-  const specificMatches = scheduleSchedulingParameters
-    .map((schedulingParameters) => {
-      const serviceType = schedulingParameters.serviceType.find((st) =>
-        serviceTypeTokens.some((token) => codeableConceptMatchesToken(st, token))
-      );
-      return serviceType ? ([schedulingParameters, serviceType] as const) : undefined;
-    })
-    .filter(isDefined);
-
-  if (specificMatches.length) {
-    return specificMatches;
+  const healthcareServiceParameters = new Map<HealthcareService, SchedulingParameters[]>();
+  for (const healthcareService of healthcareServices) {
+    healthcareServiceParameters.set(healthcareService, parseSchedulingParametersExtensions(healthcareService));
   }
 
-  // Next: entries on HealthcareService resources matching a service type
-  const healthcareServiceSchedulingParameters = healthcareServices.flatMap((healthcareService) =>
-    parseSchedulingParametersExtensions(healthcareService)
-  );
-  const sharedMatches = healthcareServiceSchedulingParameters
-    .map((schedulingParameters) => {
-      const serviceType = schedulingParameters.serviceType.find((st) =>
-        serviceTypeTokens.some((token) => codeableConceptMatchesToken(st, token))
-      );
-      return serviceType ? ([schedulingParameters, serviceType] as const) : undefined;
-    })
-    .filter(isDefined);
+  const results: SchedulingParameterGroup[] = [];
 
-  if (sharedMatches.length) {
-    return sharedMatches;
+  for (const token of serviceTypeTokens) {
+    // Open question: how to handle multiple matching services?  Initial
+    // implementation: assume that they are distinct, so returning the first
+    // match is sufficient.
+    // TODO: Follow up on multiple matches.
+    const services = healthcareServices.filter((service) => {
+      return service.type?.some((serviceType) => codeableConceptMatchesToken(serviceType, token));
+    });
+    if (services.length > 1) {
+      throw new Error(`Multiple matching HealthcareService resources found for service type token "${token}"`);
+    }
+    const serviceParams = healthcareServiceParameters.get(services[0]);
+
+    // Find matching scheduling parameters to use for each schedule
+    const paramsPerSchedule = allSchedulingParameters.map((parametersOptions) => {
+      // Open question: should this use `filter` instead of `find`? That is,
+      // can you have multiple parameters with the same service-type token?
+      // probably yes, makes matching much harder though... For initial
+      // implementation we assume that service types are distinct.
+      const found = parametersOptions.find((parameters) =>
+        parameters.serviceType.some((concept) => codeableConceptMatchesToken(concept, token))
+      );
+      if (found) {
+        return found;
+      }
+
+      // If we didn't find matching params on the schedule, try to use ones
+      // from a HealthcareService (which we already filtered to match the search token).
+      // Inital implementation assumes that there is at most one match.
+      // TODO: Follow up on multiple matches.
+      return serviceParams?.[0];
+    });
+
+    if (!paramsPerSchedule.every(isDefined)) {
+      continue;
+    }
+    if (!allMatch(paramsPerSchedule.map((p) => p.duration))) {
+      continue;
+    }
+    if (!allMatch(paramsPerSchedule.map((p) => p.alignmentInterval))) {
+      continue;
+    }
+    if (!allMatch(paramsPerSchedule.map((p) => p.alignmentOffset))) {
+      continue;
+    }
+
+    // Open question: should we do something special if the service types
+    // aren't all identical? For example, should we choose the service type
+    // that is the most/least expansive by number of codes, or prefer one with
+    // a `text` attribute?  For initial implementation we grab the first match
+    // and use it.
+    const serviceType = paramsPerSchedule[0].serviceType.find((concept) => codeableConceptMatchesToken(concept, token));
+    invariant(serviceType);
+
+    results.push([
+      {
+        duration: paramsPerSchedule[0].duration,
+        alignmentInterval: paramsPerSchedule[0].alignmentInterval,
+        alignmentOffset: paramsPerSchedule[0].alignmentOffset,
+        serviceType,
+      },
+      new Map(schedules.map((schedule, idx) => [schedule, paramsPerSchedule[idx]])),
+    ]);
   }
 
-  return [];
+  return results;
 }
 
 // Convert a single availability extension into SchedulingParametersAvailability entries.

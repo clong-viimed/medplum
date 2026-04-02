@@ -6,17 +6,29 @@ import {
   createReference,
   DEFAULT_MAX_SEARCH_COUNT,
   DEFAULT_SEARCH_COUNT,
+  isDefined,
   isResource,
   OperationOutcomeError,
   Operator,
+  resolveId,
 } from '@medplum/core';
 import type { FhirRequest, FhirResponse } from '@medplum/fhir-router';
-import type { Bundle, HealthcareService, OperationDefinition, Reference, Schedule, Slot } from '@medplum/fhirtypes';
+import type {
+  Appointment,
+  Bundle,
+  HealthcareService,
+  OperationDefinition,
+  Reference,
+  Schedule,
+  Slot,
+} from '@medplum/fhirtypes';
 import { getAuthenticatedContext } from '../../context';
 import { flatMapMax } from '../../util/array';
-import { findSlotTimes } from './utils/find';
+import { addMinutes } from '../../util/date';
+import { invariant } from '../../util/invariant';
+import { findAlignedSlotTimes } from './utils/find';
 import { buildOutputParameters, parseInputParameters } from './utils/parameters';
-import { applyExistingSlots, getTimeZone, resolveAvailability, TimezoneExtensionURI } from './utils/scheduling';
+import { applyExistingSlots, getTimeZone, overlappingIntervals, resolveAvailability } from './utils/scheduling';
 import { chooseSchedulingParameters } from './utils/scheduling-parameters';
 
 const scheduleFindOperation = {
@@ -52,7 +64,7 @@ async function handler(params: {
   serviceTypeTokens: string[];
   _count?: number;
   scheduleRefs: Reference<Schedule>[];
-}): Promise<Slot[]> {
+}): Promise<Appointment[]> {
   const ctx = getAuthenticatedContext();
   const { start, end, serviceTypeTokens, _count } = params;
   const pageSize = _count ?? DEFAULT_SEARCH_COUNT;
@@ -140,42 +152,123 @@ async function handler(params: {
     throw new OperationOutcomeError(badRequest('Loading schedule.actor failed', `schedule[${idx}]`));
   }
 
-  // WIP: Pending multi-schedule refactoring
-  const schedule = schedules[0];
-  const actor = actors[0];
+  const schedulingParameterGroups = chooseSchedulingParameters(schedules, healthcareServices, serviceTypeTokens);
 
-  const actorTimeZone = getTimeZone(actor);
-  if (!actorTimeZone) {
-    throw new OperationOutcomeError(
-      badRequest('No timezone specified', `Schedule.actor[0].extension(${TimezoneExtensionURI})`)
-    );
-  }
-
-  const schedulingParameters = chooseSchedulingParameters(schedule, healthcareServices, serviceTypeTokens);
-  if (schedulingParameters.length === 0) {
+  if (schedulingParameterGroups.length === 0) {
     throw new OperationOutcomeError(badRequest('No scheduling parameters found for the requested service type(s)'));
   }
 
   return flatMapMax(
-    schedulingParameters,
-    ([schedulingParameters, serviceType], _idx, maxCount) => {
-      // If the scheduling parameters explicitly declare a timezone, use it instead of the actor's TZ
-      const activeTimeZone = schedulingParameters.timezone ?? actorTimeZone;
-      let availability = resolveAvailability(schedulingParameters, range, activeTimeZone);
-      availability = applyExistingSlots({
-        availability,
-        slots,
-        range,
-        serviceType: [serviceType],
+    schedulingParameterGroups,
+    (schedulingParameterGroup, _idx, maxCount) => {
+      const serviceType = schedulingParameterGroup[0].serviceType;
+      const allAvailability = schedules.map((schedule, idx) => {
+        const schedulingParameters = schedulingParameterGroup[1].get(schedule);
+        invariant(schedulingParameters);
+
+        const actor = actors[idx];
+        const actorTimeZone = getTimeZone(actor);
+        const activeTimeZone = schedulingParameters.timezone ?? actorTimeZone;
+        if (!activeTimeZone) {
+          throw new OperationOutcomeError(badRequest('No timezone specified on Schedule.actor', `schedule[${idx}]`));
+        }
+        const scheduleSlots = slots.filter((slot) => resolveId(slot.schedule) === schedule.id);
+        const availability = resolveAvailability(schedulingParameters, range, activeTimeZone);
+        const availabilityWithSlots = applyExistingSlots({
+          availability,
+          slots: scheduleSlots,
+          range,
+          serviceType: schedulingParameters.serviceType,
+        });
+
+        // Trim off bufferBefore/bufferAfter frmo availability
+        const availabilityWithBuffers = availabilityWithSlots.map((interval) => ({
+          start: addMinutes(interval.start, schedulingParameters.bufferBefore),
+          end: addMinutes(interval.end, -1 * schedulingParameters.bufferAfter),
+        }));
+
+        const realAvailability = availabilityWithBuffers.filter(
+          (interval) => addMinutes(interval.start, schedulingParameters.duration) <= interval.end
+        );
+
+        return realAvailability;
       });
-      return findSlotTimes(schedulingParameters, availability, { maxCount }).map(({ start, end }) => ({
-        resourceType: 'Slot',
-        start: start.toISOString(),
-        end: end.toISOString(),
-        schedule: createReference(schedule),
-        status: 'free',
-        serviceType: [serviceType],
-      }));
+
+      const intersectingAvailability = allAvailability.reduce((acc, val) => overlappingIntervals(acc, val));
+
+      const intervals = flatMapMax(
+        intersectingAvailability,
+        (interval, _idx, innerMaxCount) =>
+          findAlignedSlotTimes(interval, {
+            alignment: schedulingParameterGroup[0].alignmentInterval,
+            offsetMinutes: schedulingParameterGroup[0].alignmentOffset,
+            durationMinutes: schedulingParameterGroup[0].duration,
+            maxCount: innerMaxCount,
+          }),
+        maxCount
+      );
+
+      return intervals.map((interval) => {
+        const start = interval.start.toISOString();
+        const end = interval.end.toISOString();
+        const slots: Slot[] = schedules.flatMap((schedule) => {
+          const parameters = schedulingParameterGroup[1].get(schedule);
+          invariant(parameters);
+
+          const result: Slot[] = [
+            {
+              resourceType: 'Slot',
+              start,
+              end,
+              schedule: createReference(schedule),
+              status: 'busy',
+              serviceType: [serviceType],
+            },
+          ];
+
+          if (parameters.bufferBefore) {
+            result.push({
+              resourceType: 'Slot',
+              start: addMinutes(interval.start, -1 * parameters.bufferBefore).toISOString(),
+              end: start,
+              schedule: createReference(schedule),
+              status: 'busy-unavailable',
+              serviceType: [serviceType],
+              comment: 'buffer before appointment',
+            });
+          }
+
+          if (parameters.bufferAfter) {
+            result.push({
+              resourceType: 'Slot',
+              start: end,
+              end: addMinutes(interval.end, parameters.bufferAfter).toISOString(),
+              schedule: createReference(schedule),
+              status: 'busy-unavailable',
+              serviceType: [serviceType],
+              comment: 'buffer after appointment',
+            });
+          }
+
+          return result;
+        });
+
+        const appointment = {
+          resourceType: 'Appointment',
+          start: interval.start.toISOString(),
+          end: interval.end.toISOString(),
+          status: 'proposed',
+          serviceType: [serviceType],
+          participant: actors.map((actor) => ({
+            actor: createReference(actor),
+            required: 'required',
+            status: 'needs-action',
+          })),
+          contained: slots,
+        } satisfies Appointment;
+
+        return appointment;
+      });
     },
     pageSize
   );
@@ -198,7 +291,7 @@ export async function scheduleFindHandler(req: FhirRequest): Promise<FhirRespons
   // service types are in `${system}|${code}` format, in a comma separated list
   const serviceTypeTokens = params['service-type'].split(',');
 
-  const slots = await handler({
+  const appointments = await handler({
     start,
     end,
     _count,
@@ -206,10 +299,21 @@ export async function scheduleFindHandler(req: FhirRequest): Promise<FhirRespons
     scheduleRefs: [{ reference: `Schedule/${req.params.id}` }],
   });
 
+  const slots = appointments
+    .map((appointment) => appointment.contained?.find((resource) => isResource<Slot>(resource, 'Slot')))
+    .filter(isDefined);
+
   const bundle: Bundle<Slot> = {
     resourceType: 'Bundle',
     type: 'searchset',
-    entry: slots.map((slot) => ({ resource: slot })),
+    entry: slots
+      .filter((slot) => slot.status === 'busy')
+      .map((slot) => ({
+        resource: {
+          ...slot,
+          status: 'free',
+        },
+      })),
   };
 
   return [allOk, buildOutputParameters(scheduleFindOperation, bundle)];
