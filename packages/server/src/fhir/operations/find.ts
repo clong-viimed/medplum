@@ -6,11 +6,12 @@ import {
   createReference,
   DEFAULT_MAX_SEARCH_COUNT,
   DEFAULT_SEARCH_COUNT,
+  isResource,
   OperationOutcomeError,
   Operator,
 } from '@medplum/core';
 import type { FhirRequest, FhirResponse } from '@medplum/fhir-router';
-import type { Bundle, HealthcareService, OperationDefinition, Schedule, Slot } from '@medplum/fhirtypes';
+import type { Bundle, HealthcareService, OperationDefinition, Reference, Schedule, Slot } from '@medplum/fhirtypes';
 import { getAuthenticatedContext } from '../../context';
 import { flatMapMax } from '../../util/array';
 import { findSlotTimes } from './utils/find';
@@ -50,7 +51,7 @@ async function handler(params: {
   end: string;
   serviceTypeTokens: string[];
   _count?: number;
-  scheduleId: string;
+  scheduleRefs: Reference<Schedule>[];
 }): Promise<Slot[]> {
   const ctx = getAuthenticatedContext();
   const { start, end, serviceTypeTokens, _count } = params;
@@ -85,8 +86,8 @@ async function handler(params: {
     ],
   });
 
-  const [schedule, slots, healthcareServices] = await Promise.all([
-    ctx.repo.readResource<Schedule>('Schedule', params.scheduleId),
+  const [schedules, slots, healthcareServices] = await Promise.all([
+    ctx.repo.readReferences<Schedule>(params.scheduleRefs),
     ctx.repo.searchResources<Slot>({
       resourceType: 'Slot',
 
@@ -96,7 +97,7 @@ async function handler(params: {
         {
           code: 'schedule',
           operator: Operator.EQUALS,
-          value: `Schedule/${params.scheduleId}`,
+          value: params.scheduleRefs.map((ref) => ref.reference).join(','),
         },
 
         {
@@ -124,10 +125,25 @@ async function handler(params: {
     throw new OperationOutcomeError(badRequest('Too many slots found in range; try searching with smaller bounds'));
   }
 
-  if (schedule.actor.length !== 1) {
+  if (!schedules.every((schedule) => isResource(schedule))) {
+    const idx = schedules.findIndex((schedule) => !isResource(schedule));
+    throw new OperationOutcomeError(badRequest('Loading schedule failed', `schedule[${idx}]`));
+  }
+
+  if (schedules.some((schedule) => schedule.actor.length !== 1)) {
     throw new OperationOutcomeError(badRequest('$find only supported on schedules with exactly one actor'));
   }
-  const actor = await ctx.repo.readReference(schedule.actor[0]);
+
+  const actors = await ctx.repo.readReferences(schedules.map((schedule) => schedule.actor[0]));
+  if (!actors.every((actor) => isResource(actor))) {
+    const idx = actors.findIndex((actor) => !isResource(actor));
+    throw new OperationOutcomeError(badRequest('Loading schedule.actor failed', `schedule[${idx}]`));
+  }
+
+  // WIP: Pending multi-schedule refactoring
+  const schedule = schedules[0];
+  const actor = actors[0];
+
   const actorTimeZone = getTimeZone(actor);
   if (!actorTimeZone) {
     throw new OperationOutcomeError(
@@ -187,7 +203,7 @@ export async function scheduleFindHandler(req: FhirRequest): Promise<FhirRespons
     end,
     _count,
     serviceTypeTokens,
-    scheduleId: req.params.id,
+    scheduleRefs: [{ reference: `Schedule/${req.params.id}` }],
   });
 
   const bundle: Bundle<Slot> = {
