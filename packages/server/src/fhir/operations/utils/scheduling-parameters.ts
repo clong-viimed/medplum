@@ -180,7 +180,13 @@ export function chooseSchedulingParameters(
 
   const results: SchedulingParameterGroup[] = [];
 
+  const seenTokens = new Set<string>();
+
   for (const token of serviceTypeTokens) {
+    if (seenTokens.has(token)) {
+      continue;
+    }
+
     // Open question: how to handle multiple matching services?  Initial
     // implementation: assume that they are distinct, so returning the first
     // match is sufficient.
@@ -233,6 +239,12 @@ export function chooseSchedulingParameters(
     // and use it.
     const serviceType = paramsPerSchedule[0].serviceType.find((concept) => codeableConceptMatchesToken(concept, token));
     invariant(serviceType);
+
+    // Add tokens from this service type to our "seenTokens" list so we can skip
+    // processing them and avoid emitting the same service type multiple times.
+    for (const coding of serviceType.coding ?? EMPTY) {
+      seenTokens.add(`${coding.system ?? ''}|${coding.code ?? ''}`);
+    }
 
     results.push([
       {

@@ -26,7 +26,6 @@ import { addMinutes, areIntervalsOverlapping } from '../../util/date';
 import { invariant } from '../../util/invariant';
 import { buildOutputParameters, parseInputParameters } from './utils/parameters';
 import { applyExistingSlots, getTimeZone, resolveAvailability } from './utils/scheduling';
-import type { SchedulingParameters } from './utils/scheduling-parameters';
 import { chooseSchedulingParameters } from './utils/scheduling-parameters';
 
 const bookOperation = {
@@ -79,33 +78,6 @@ function serviceTypeTokens(slots: Slot[]): string[] {
   return [...tokenSet.values()];
 }
 
-function chooseActiveParameters(
-  proposedSlot: Slot,
-  parameters: SchedulingParameters[],
-  actorTimeZone: string,
-  existingSlots: Slot[]
-): SchedulingParameters | undefined {
-  const startDate = new Date(proposedSlot.start);
-  const endDate = new Date(proposedSlot.end);
-  return parameters.find((params) => {
-    const timeZone = params.timezone ?? actorTimeZone;
-    const range = {
-      start: addMinutes(startDate, -1 * params.bufferBefore),
-      end: addMinutes(endDate, params.bufferAfter),
-    };
-    const availability = resolveAvailability(params, range, timeZone);
-    const result = applyExistingSlots({
-      availability,
-      slots: existingSlots,
-      range,
-      serviceType: proposedSlot.serviceType ?? EMPTY,
-    });
-    return result.some(
-      (interval) => interval.start.getTime() <= range.start.getTime() && interval.end.getTime() >= range.end.getTime()
-    );
-  });
-}
-
 /**
  * Handles HTTP requests for the Appointment $book operation.
  *
@@ -131,6 +103,7 @@ export async function appointmentBookHandler(req: FhirRequest): Promise<FhirResp
 
   const startDate = new Date(start);
   const endDate = new Date(end);
+  const durationMinutes = (endDate.valueOf() - startDate.valueOf()) / 60_000;
 
   if (params['patient-reference']) {
     // validate that the patient reference exists and is visible to the caller
@@ -171,6 +144,18 @@ export async function appointmentBookHandler(req: FhirRequest): Promise<FhirResp
 
   const bufferSlots: Slot[] = [];
 
+  const parameterGroups = chooseSchedulingParameters(schedules, healthcareServices, allServiceTypes).filter(
+    (group) => group[0].duration === durationMinutes
+  );
+
+  if (parameterGroups.length === 0) {
+    throw new OperationOutcomeError(badRequest('No matching scheduling parameters found'));
+  }
+
+  // Q: Can there be multiple matching parameter groups? What should we do if so?
+  // For initial implementation, assume only one and grab the first match.
+  const parameterGroup = parameterGroups[0];
+
   const createdResources = await ctx.repo.withTransaction(
     async () => {
       await Promise.all(
@@ -188,23 +173,16 @@ export async function appointmentBookHandler(req: FhirRequest): Promise<FhirResp
             );
           }
 
-          const slotServiceTypes = serviceTypeTokens([proposedSlot]);
+          const parameters = parameterGroup[1].get(schedule);
+          invariant(parameters);
 
-          const durationMinutes = (Date.parse(proposedSlot.end) - Date.parse(proposedSlot.start)) / 60000;
+          const range = {
+            start: addMinutes(startDate, -1 * parameters.bufferBefore),
+            end: addMinutes(endDate, parameters.bufferAfter),
+          };
 
-          const parameters = chooseSchedulingParameters(schedule, healthcareServices, slotServiceTypes)
-            .map(([params]) => params)
-            .filter((params) => params.duration === durationMinutes);
-
-          if (parameters.length === 0) {
-            throw new OperationOutcomeError(badRequest('No matching scheduling parameters found'));
-          }
-
-          const bufferBeforeMax = Math.max(...parameters.map((p) => p.bufferBefore));
-          const bufferAfterMax = Math.max(...parameters.map((p) => p.bufferAfter));
-
-          const searchStart = addMinutes(startDate, -1 * bufferBeforeMax).toISOString();
-          const searchEnd = addMinutes(endDate, bufferAfterMax).toISOString();
+          const searchStart = range.start.toISOString();
+          const searchEnd = range.end.toISOString();
 
           const existingSlots = await ctx.repo.searchResources<Slot>({
             resourceType: 'Slot',
@@ -249,28 +227,35 @@ export async function appointmentBookHandler(req: FhirRequest): Promise<FhirResp
             throw new OperationOutcomeError(conflict('Requested time slot is no longer available'));
           }
 
-          const activeParameters = chooseActiveParameters(proposedSlot, parameters, actorTimeZone, existingSlots);
+          const timeZone = parameters.timezone ?? actorTimeZone;
+          const baseAvailability = resolveAvailability(parameters, range, timeZone);
+          const availability = applyExistingSlots({
+            availability: baseAvailability,
+            slots: existingSlots,
+            range,
+            serviceType: parameters.serviceType,
+          });
 
-          if (!activeParameters) {
+          if (!availability.some((interval) => interval.start <= range.start && interval.end >= range.end)) {
             throw new OperationOutcomeError(badRequest('No availability found at this time'));
           }
 
-          if (activeParameters.bufferBefore) {
+          if (parameters.bufferBefore) {
             bufferSlots.push({
               resourceType: 'Slot',
               status: 'busy-unavailable',
-              start: addMinutes(startDate, -1 * activeParameters.bufferBefore).toISOString(),
+              start: addMinutes(startDate, -1 * parameters.bufferBefore).toISOString(),
               end: startDate.toISOString(),
               schedule: proposedSlot.schedule,
             });
           }
 
-          if (activeParameters.bufferAfter) {
+          if (parameters.bufferAfter) {
             bufferSlots.push({
               resourceType: 'Slot',
               status: 'busy-unavailable',
               start: endDate.toISOString(),
-              end: addMinutes(endDate, activeParameters.bufferAfter).toISOString(),
+              end: addMinutes(endDate, parameters.bufferAfter).toISOString(),
               schedule: proposedSlot.schedule,
             });
           }
