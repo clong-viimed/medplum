@@ -44,23 +44,16 @@ type ScheduleFindParameters = {
   _count?: number;
 };
 
-/**
- * Handles HTTP requests for the Schedule $find operation.
- *
- * Endpoints:
- *   [fhir base]/Schedule/[id]/$find
- *
- * @param req - The FHIR request.
- * @returns The FHIR response.
- */
-export async function scheduleFindHandler(req: FhirRequest): Promise<FhirResponse> {
+// Internal implementation of $find logic
+async function handler(params: {
+  start: string;
+  end: string;
+  serviceTypeTokens: string[];
+  _count?: number;
+  scheduleId: string;
+}): Promise<Slot[]> {
   const ctx = getAuthenticatedContext();
-  const params = parseInputParameters<ScheduleFindParameters>(scheduleFindOperation, req);
-  const { start, end, _count } = params;
-
-  // service types are in `${system}|${code}` format, in a comma separated list
-  const serviceTypeTokens = params['service-type'].split(',');
-
+  const { start, end, serviceTypeTokens, _count } = params;
   const pageSize = _count ?? DEFAULT_SEARCH_COUNT;
   if (pageSize < 1) {
     throw new OperationOutcomeError(badRequest('Invalid _count, minimum required is 1'));
@@ -93,7 +86,7 @@ export async function scheduleFindHandler(req: FhirRequest): Promise<FhirRespons
   });
 
   const [schedule, slots, healthcareServices] = await Promise.all([
-    ctx.repo.readResource<Schedule>('Schedule', req.params.id),
+    ctx.repo.readResource<Schedule>('Schedule', params.scheduleId),
     ctx.repo.searchResources<Slot>({
       resourceType: 'Slot',
 
@@ -103,7 +96,7 @@ export async function scheduleFindHandler(req: FhirRequest): Promise<FhirRespons
         {
           code: 'schedule',
           operator: Operator.EQUALS,
-          value: `Schedule/${req.params.id}`,
+          value: `Schedule/${params.scheduleId}`,
         },
 
         {
@@ -147,7 +140,7 @@ export async function scheduleFindHandler(req: FhirRequest): Promise<FhirRespons
     throw new OperationOutcomeError(badRequest('No scheduling parameters found for the requested service type(s)'));
   }
 
-  const resultSlots: Slot[] = flatMapMax(
+  return flatMapMax(
     schedulingParameters,
     ([schedulingParameters, serviceType], _idx, maxCount) => {
       // If the scheduling parameters explicitly declare a timezone, use it instead of the actor's TZ
@@ -170,11 +163,37 @@ export async function scheduleFindHandler(req: FhirRequest): Promise<FhirRespons
     },
     pageSize
   );
+}
+
+/**
+ * Handles HTTP requests for the Schedule $find operation.
+ *
+ * Endpoints:
+ *   [fhir base]/Schedule/[id]/$find
+ *
+ * @param req - The FHIR request.
+ * @returns The FHIR response.
+ */
+export async function scheduleFindHandler(req: FhirRequest): Promise<FhirResponse> {
+  const params = parseInputParameters<ScheduleFindParameters>(scheduleFindOperation, req);
+
+  const { start, end, _count } = params;
+
+  // service types are in `${system}|${code}` format, in a comma separated list
+  const serviceTypeTokens = params['service-type'].split(',');
+
+  const slots = await handler({
+    start,
+    end,
+    _count,
+    serviceTypeTokens,
+    scheduleId: req.params.id,
+  });
 
   const bundle: Bundle<Slot> = {
     resourceType: 'Bundle',
     type: 'searchset',
-    entry: resultSlots.slice(0, pageSize).map((slot) => ({ resource: slot })),
+    entry: slots.map((slot) => ({ resource: slot })),
   };
 
   return [allOk, buildOutputParameters(scheduleFindOperation, bundle)];
