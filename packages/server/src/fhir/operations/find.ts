@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import {
   allOk,
+  arrayify,
   badRequest,
   createReference,
   DEFAULT_MAX_SEARCH_COUNT,
@@ -50,10 +51,38 @@ const scheduleFindOperation = {
   ],
 } as const satisfies OperationDefinition;
 
+const appointmentFindOperation = {
+  resourceType: 'OperationDefinition',
+  name: 'find',
+  status: 'active',
+  kind: 'operation',
+  code: 'find',
+  resource: ['Appointment'],
+  system: false,
+  type: true,
+  instance: false,
+  parameter: [
+    { use: 'in', name: 'start', type: 'dateTime', min: 1, max: '1' },
+    { use: 'in', name: 'end', type: 'dateTime', min: 1, max: '1' },
+    { use: 'in', name: 'service-type', type: 'string', min: 1, max: '1' },
+    { use: 'in', name: 'schedule', type: 'string', min: 1, max: '*', searchType: 'reference' },
+    { use: 'in', name: '_count', type: 'integer', min: 0, max: '1' },
+    { use: 'out', name: 'return', type: 'Bundle', min: 0, max: '1' },
+  ],
+} as const satisfies OperationDefinition;
+
 type ScheduleFindParameters = {
   start: string;
   end: string;
   'service-type': string;
+  _count?: number;
+};
+
+type AppointmentFindParameters = {
+  start: string;
+  end: string;
+  'service-type': string;
+  schedule: string | string[];
   _count?: number;
 };
 
@@ -317,4 +346,42 @@ export async function scheduleFindHandler(req: FhirRequest): Promise<FhirRespons
   };
 
   return [allOk, buildOutputParameters(scheduleFindOperation, bundle)];
+}
+
+/**
+ * Handles HTTP requests for the Appointment $find operation.
+ *
+ * Endpoints:
+ *   [fhir base]/Appointment/$find
+ *
+ * @param req - The FHIR request.
+ * @returns The FHIR response.
+ */
+export async function appointmentFindHandler(req: FhirRequest): Promise<FhirResponse> {
+  const params = parseInputParameters<AppointmentFindParameters>(appointmentFindOperation, req);
+
+  const { schedule, start, end, _count } = params;
+
+  // service types are in `${system}|${code}` format, in a comma separated list
+  const serviceTypeTokens = params['service-type'].split(',');
+
+  const scheduleRefs = arrayify(schedule).map((reference) => ({ reference }));
+
+  const appointments = await handler({
+    start,
+    end,
+    _count,
+    serviceTypeTokens,
+    scheduleRefs,
+  });
+
+  const bundle: Bundle<Appointment> = {
+    resourceType: 'Bundle',
+    type: 'searchset',
+    entry: appointments.map((appointment) => ({
+      resource: appointment,
+    })),
+  };
+
+  return [allOk, buildOutputParameters(appointmentFindOperation, bundle)];
 }
