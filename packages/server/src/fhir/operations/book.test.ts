@@ -21,11 +21,11 @@ import { initApp, shutdownApp } from '../../app';
 import { loadTestConfig } from '../../config/loader';
 import { getGlobalSystemRepo } from '../../fhir/repo';
 import type { TestProjectResult } from '../../test.setup';
+import { addTestUser, createTestProject } from '../../test.setup';
 import type {
   SchedulingParametersExtension,
   SchedulingParametersExtensionExtension,
 } from './utils/scheduling-parameters';
-import { addTestUser, createTestProject } from '../../test.setup';
 
 const systemRepo = getGlobalSystemRepo();
 const app = express();
