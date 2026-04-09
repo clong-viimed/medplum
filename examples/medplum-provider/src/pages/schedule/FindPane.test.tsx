@@ -28,6 +28,16 @@ describe('FindPane', () => {
     text: 'Annual Checkup',
   };
 
+  const service1: WithId<HealthcareService> = {
+    id: 'hs1',
+    resourceType: 'HealthcareService',
+    name: 'Annual Checkup',
+    type: [serviceType1],
+    extension: [
+      { url: SchedulingParametersURI, extension: [{ url: 'duration', valueDuration: { value: 20, unit: 'min' } }] },
+    ],
+  };
+
   const serviceType2: CodeableConcept = {
     coding: [
       {
@@ -37,11 +47,35 @@ describe('FindPane', () => {
     text: 'Follow-up Visit',
   };
 
-  const createScheduleWithServiceTypes = (serviceTypes: (CodeableConcept | undefined)[]): WithId<Schedule> => ({
+  const service2: WithId<HealthcareService> = {
+    id: 'hs2',
+    resourceType: 'HealthcareService',
+    name: 'Follow-up Visit',
+    type: [serviceType2],
+    extension: [
+      { url: SchedulingParametersURI, extension: [{ url: 'duration', valueDuration: { value: 20, unit: 'min' } }] },
+    ],
+  };
+
+  // This service does not have a scheduling extension on it, and so should not
+  // be visible in the scheduling UI
+  const service3: WithId<HealthcareService> = {
+    id: 'hs3',
+    resourceType: 'HealthcareService',
+    name: 'Non-schedulable type',
+    type: [
+      {
+        coding: [{ code: 'not-available' }],
+      },
+    ],
+  };
+
+  const createScheduleWithServiceTypes = (serviceTypes: CodeableConcept[]): WithId<Schedule> => ({
     resourceType: 'Schedule',
     id: 'schedule-1',
     actor: [{ reference: 'Practitioner/practitioner-1' }],
     active: true,
+    serviceType: serviceTypes,
     extension: serviceTypes.map((st) => ({
       url: SchedulingParametersURI,
       extension: st ? [{ url: 'serviceType', valueCodeableConcept: st }] : [],
@@ -72,6 +106,35 @@ describe('FindPane', () => {
     },
   ];
 
+  // Spy on searchResources to return controlled HealthcareService data.
+  // MockClient's MemoryRepository doesn't have HealthcareService search
+  // parameters indexed, so we can't rely on it filtering by service-type.
+  const mockHealthcareServiceSearch = (healthcareServices: WithId<HealthcareService>[]): void => {
+    const bundle: Bundle<WithId<HealthcareService>> = {
+      resourceType: 'Bundle',
+      type: 'searchset',
+      entry: healthcareServices.map((resource) => ({ resource })),
+    } as const;
+
+    const resourceArray = Object.assign([...healthcareServices], { bundle });
+
+    vi.spyOn(medplum, 'searchResources').mockImplementation((resourceType) => {
+      if (resourceType === 'HealthcareService') {
+        return new ReadablePromise(Promise.resolve(resourceArray));
+      }
+      return new ReadablePromise(
+        Promise.resolve(
+          Object.assign([], {
+            bundle: {
+              resourceType: 'Bundle',
+              type: 'searchset',
+            } as const,
+          })
+        )
+      );
+    });
+  };
+
   beforeEach(() => {
     medplum = new MockClient();
     vi.clearAllMocks();
@@ -82,6 +145,9 @@ describe('FindPane', () => {
       type: 'searchset',
       entry: mockSlots.map((slot) => ({ resource: slot })),
     } as Bundle<Slot>);
+
+    // Mock searchResource to return our test HealthcareService resources
+    mockHealthcareServiceSearch([service1, service2, service3]);
   });
 
   type SetupOptions = {
@@ -113,7 +179,8 @@ describe('FindPane', () => {
     );
   };
 
-  test('it renders null when there are no schedulable service types', async () => {
+  test('it renders null when there are no schedulable service types on the Schedule', async () => {
+    // schedule.serviceType is missing, no schedulable services
     const schedule = {
       resourceType: 'Schedule',
       id: 'schedule-123',
@@ -134,7 +201,7 @@ describe('FindPane', () => {
       expect(screen.getByText('Schedule…')).toBeInTheDocument();
     });
 
-    test('renders service type buttons for each scheduling parameter', async () => {
+    test('renders a button for each scheduleable HealthcareService', async () => {
       await act(async () => {
         setup();
       });
@@ -192,8 +259,9 @@ describe('FindPane', () => {
 
       // Slots should be rendered as buttons with formatted date/time
       const buttons = screen.getAllByRole('button');
-      // At least dismiss button + slot buttons
-      expect(buttons.length).toBeGreaterThanOrEqual(2);
+
+      // 1 dismiss button + 2 slot buttons
+      expect(buttons.length).toEqual(3);
     });
   });
 
@@ -226,8 +294,9 @@ describe('FindPane', () => {
     });
   });
 
-  describe('Auto-Selection with Single Service Type', () => {
-    test('auto-selects when there is exactly one service type', async () => {
+  describe('Auto-Selection with Single Service', () => {
+    test('auto-selects when there is exactly one schedulable service', async () => {
+      mockHealthcareServiceSearch([service1]);
       const schedule = createScheduleWithServiceTypes([serviceType1]);
 
       await act(async () => {
@@ -243,6 +312,7 @@ describe('FindPane', () => {
     });
 
     test('does not show dismiss button when auto-selected with single option', async () => {
+      mockHealthcareServiceSearch([service1]);
       const schedule = createScheduleWithServiceTypes([serviceType1]);
 
       await act(async () => {
@@ -376,35 +446,6 @@ describe('FindPane', () => {
       text: 'Therapy Session',
     };
 
-    // Spy on searchResources to return controlled HealthcareService data.
-    // MockClient's MemoryRepository doesn't have HealthcareService search
-    // parameters indexed, so we can't rely on it filtering by service-type.
-    const mockHealthcareServiceSearch = (healthcareServices: WithId<HealthcareService>[]): void => {
-      const bundle: Bundle<WithId<HealthcareService>> = {
-        resourceType: 'Bundle',
-        type: 'searchset',
-        entry: healthcareServices.map((resource) => ({ resource })),
-      } as const;
-
-      const resourceArray = Object.assign([...healthcareServices], { bundle });
-
-      vi.spyOn(medplum, 'searchResources').mockImplementation((resourceType) => {
-        if (resourceType === 'HealthcareService') {
-          return new ReadablePromise(Promise.resolve(resourceArray));
-        }
-        return new ReadablePromise(
-          Promise.resolve(
-            Object.assign([], {
-              bundle: {
-                resourceType: 'Bundle',
-                type: 'searchset',
-              } as const,
-            })
-          )
-        );
-      });
-    };
-
     test('shows service types from HealthcareService resources', async () => {
       mockHealthcareServiceSearch([
         {
@@ -426,27 +467,6 @@ describe('FindPane', () => {
       await act(async () => setup({ schedule }));
 
       await waitFor(() => expect(screen.getByText('Therapy Session')).toBeInTheDocument());
-    });
-
-    test('deduplicates service types that appear in both HealthcareService and Schedule', async () => {
-      // serviceType1 exists in both the HealthcareService and the Schedule
-      mockHealthcareServiceSearch([
-        {
-          resourceType: 'HealthcareService',
-          id: 'hs-1',
-          type: [serviceType1],
-          extension: [{ url: SchedulingParametersURI }],
-        },
-      ]);
-
-      const schedule = createScheduleWithServiceTypes([serviceType1, serviceType2]);
-
-      await act(async () => setup({ schedule }));
-
-      // serviceType1 should appear only once
-      await waitFor(() => expect(screen.getAllByText('Annual Checkup')).toHaveLength(1));
-      // serviceType2 is schedule-only and should still appear
-      expect(screen.getByText('Follow-up Visit')).toBeInTheDocument();
     });
 
     test('ignores HealthcareService resources without scheduling parameters', async () => {
