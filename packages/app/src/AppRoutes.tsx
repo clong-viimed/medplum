@@ -61,6 +61,7 @@ import { ToolsPage } from './resource/ToolsPage';
 import { SecurityPage } from './SecurityPage';
 import { SetPasswordPage } from './SetPasswordPage';
 import { SignInPage } from './SignInPage';
+import { SignOutPage } from './SignOutPage';
 import { SmartSearchPage } from './SmartSearchPage';
 import { VerifyEmailPage } from './VerifyEmailPage';
 
@@ -69,6 +70,8 @@ export function AppRoutes(): JSX.Element {
     <Routes>
       <Route errorElement={<ErrorPage />}>
         <Route path="/signin" element={<SignInPage />} />
+        <Route path="/logout" element={<SignOutPage />} />
+        <Route path="/signout" element={<SignOutPage />} />
         <Route path="/oauth" element={<OAuthPage />} />
         <Route path="/resetpassword" element={<ResetPasswordPage />} />
         <Route path="/setpassword/:id/:secret" element={<SetPasswordPage />} />
