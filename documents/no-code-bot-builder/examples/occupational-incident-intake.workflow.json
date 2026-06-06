@@ -1,0 +1,362 @@
+{
+  "schemaVersion": "1.0",
+  "workflowId": "occupational-incident-intake-v1",
+  "name": "Occupational Incident Intake Processor",
+  "description": "No-code workflow equivalent for the Occupational Incident Intake Processor bot.",
+  "runMode": "bot-membership",
+  "trigger": {
+    "type": "subscription",
+    "resourceType": "QuestionnaireResponse",
+    "criteria": "QuestionnaireResponse?questionnaire=Questionnaire/4765863a-fda9-4369-89a6-af50ac296cab",
+    "contentType": "application/fhir+json"
+  },
+  "variables": {
+    "demoProviderReference": "Practitioner/59ea2d1d-f436-437c-a785-74850bddbfd3",
+    "codeSystem": "https://hiivecare.example/fhir/CodeSystem/medplum-ubix-demo",
+    "caseIdentifierSystem": "https://hiivecare.example/fhir/NamingSystem/occupational-incident-case-key",
+    "questionnaireResponseIdentifierSystem": "https://hiivecare.example/fhir/NamingSystem/occupational-incident-questionnaire-response"
+  },
+  "actions": [
+    {
+      "id": "parse-intake",
+      "type": "parse-questionnaire-response",
+      "name": "Parse questionnaire answers",
+      "input": "{{ trigger.input }}",
+      "fieldMap": {
+        "incidentType": {
+          "linkId": "incidentType",
+          "kind": "choice",
+          "required": true
+        },
+        "component": {
+          "linkId": "component",
+          "kind": "choice",
+          "required": true
+        },
+        "dutyLocation": {
+          "linkId": "dutyLocation",
+          "kind": "choice",
+          "required": true
+        },
+        "incidentDateTime": {
+          "linkId": "incidentDateTime",
+          "kind": "dateTime",
+          "required": true
+        },
+        "returnToWorkStatus": {
+          "linkId": "returnToWorkStatus",
+          "kind": "choice",
+          "required": false,
+          "fallback": "pending-reevaluation"
+        },
+        "restrictionType": {
+          "linkId": "restrictionType",
+          "kind": "choice",
+          "required": false,
+          "fallback": "field-duty-restricted"
+        },
+        "restrictionSummary": {
+          "linkId": "restrictionSummary",
+          "kind": "string",
+          "required": false
+        },
+        "restrictionLimit": {
+          "linkId": "restrictionLimit",
+          "kind": "string",
+          "required": false
+        },
+        "restrictionEffectiveDate": {
+          "linkId": "restrictionEffectiveDate",
+          "kind": "date",
+          "required": false
+        },
+        "restrictionExpirationDate": {
+          "linkId": "restrictionExpirationDate",
+          "kind": "date",
+          "required": false
+        },
+        "restrictionReevaluationDate": {
+          "linkId": "restrictionReevaluationDate",
+          "kind": "date",
+          "required": false
+        }
+      }
+    },
+    {
+      "id": "derive-case-key",
+      "type": "set-variable",
+      "name": "Compute case key",
+      "variable": "caseKey",
+      "value": "{{ concat(lower(trigger.input.subject.reference), '|', actions.parse-intake.incidentDateTime, '|', actions.parse-intake.incidentType.code, '|', actions.parse-intake.component.code, '|', actions.parse-intake.dutyLocation.code) }}"
+    },
+    {
+      "id": "upsert-episode",
+      "type": "upsert-by-identifier",
+      "name": "Upsert EpisodeOfCare",
+      "resourceType": "EpisodeOfCare",
+      "identifier": {
+        "system": "{{ variables.caseIdentifierSystem }}",
+        "value": "{{ variables.caseKey }}"
+      },
+      "writeResultTo": "episode",
+      "resource": {
+        "resourceType": "EpisodeOfCare",
+        "status": "active",
+        "identifier": [
+          {
+            "system": "{{ variables.caseIdentifierSystem }}",
+            "value": "{{ variables.caseKey }}"
+          }
+        ],
+        "patient": {
+          "reference": "{{ trigger.input.subject.reference }}"
+        },
+        "period": {
+          "start": "{{ actions.parse-intake.incidentDateTime }}"
+        },
+        "reasonCode": [
+          {
+            "coding": [
+              {
+                "system": "{{ variables.codeSystem }}",
+                "code": "{{ actions.parse-intake.incidentType.code }}",
+                "display": "{{ actions.parse-intake.incidentType.display }}"
+              }
+            ],
+            "text": "{{ actions.parse-intake.incidentType.display }}"
+          }
+        ],
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "{{ variables.codeSystem }}",
+                "code": "{{ actions.parse-intake.incidentType.code }}",
+                "display": "{{ actions.parse-intake.incidentType.display }}"
+              }
+            ],
+            "text": "{{ actions.parse-intake.incidentType.display }}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "upsert-encounter",
+      "type": "upsert-by-identifier",
+      "name": "Upsert Encounter",
+      "resourceType": "Encounter",
+      "identifier": {
+        "system": "{{ variables.caseIdentifierSystem }}",
+        "value": "{{ variables.caseKey }}"
+      },
+      "writeResultTo": "encounter",
+      "resource": {
+        "resourceType": "Encounter",
+        "status": "finished",
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "AMB",
+          "display": "ambulatory"
+        },
+        "identifier": [
+          {
+            "system": "{{ variables.caseIdentifierSystem }}",
+            "value": "{{ variables.caseKey }}"
+          }
+        ],
+        "subject": {
+          "reference": "{{ trigger.input.subject.reference }}"
+        },
+        "episodeOfCare": [
+          {
+            "reference": "EpisodeOfCare/{{ actions.upsert-episode.episode.id }}"
+          }
+        ],
+        "period": {
+          "start": "{{ actions.parse-intake.incidentDateTime }}",
+          "end": "{{ actions.parse-intake.incidentDateTime }}"
+        },
+        "reasonCode": [
+          {
+            "coding": [
+              {
+                "system": "{{ variables.codeSystem }}",
+                "code": "{{ actions.parse-intake.incidentType.code }}",
+                "display": "{{ actions.parse-intake.incidentType.display }}"
+              }
+            ],
+            "text": "{{ actions.parse-intake.incidentType.display }}"
+          }
+        ],
+        "reasonReference": [
+          {
+            "reference": "QuestionnaireResponse/{{ trigger.input.id }}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "upsert-service-request",
+      "type": "upsert-by-identifier",
+      "name": "Upsert ServiceRequest",
+      "resourceType": "ServiceRequest",
+      "identifier": {
+        "system": "{{ variables.caseIdentifierSystem }}",
+        "value": "{{ variables.caseKey }}"
+      },
+      "writeResultTo": "serviceRequest",
+      "resource": {
+        "resourceType": "ServiceRequest",
+        "status": "active",
+        "intent": "order",
+        "identifier": [
+          {
+            "system": "{{ variables.caseIdentifierSystem }}",
+            "value": "{{ variables.caseKey }}"
+          }
+        ],
+        "subject": {
+          "reference": "{{ trigger.input.subject.reference }}"
+        },
+        "encounter": {
+          "reference": "Encounter/{{ actions.upsert-encounter.encounter.id }}"
+        },
+        "reasonReference": [
+          {
+            "reference": "EpisodeOfCare/{{ actions.upsert-episode.episode.id }}"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "{{ variables.codeSystem }}",
+              "code": "occupational-follow-up",
+              "display": "Occupational follow-up"
+            }
+          ],
+          "text": "Occupational follow-up"
+        },
+        "basedOn": [
+          {
+            "reference": "QuestionnaireResponse/{{ trigger.input.id }}"
+          }
+        ],
+        "authoredOn": "{{ actions.parse-intake.incidentDateTime }}"
+      }
+    },
+    {
+      "id": "upsert-observation",
+      "type": "upsert-by-identifier",
+      "name": "Upsert Observation",
+      "resourceType": "Observation",
+      "identifier": {
+        "system": "{{ variables.caseIdentifierSystem }}",
+        "value": "{{ variables.caseKey }}"
+      },
+      "writeResultTo": "observation",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "identifier": [
+          {
+            "system": "{{ variables.caseIdentifierSystem }}",
+            "value": "{{ variables.caseKey }}"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "{{ variables.codeSystem }}",
+              "code": "return-to-work-status",
+              "display": "Return-to-work status"
+            }
+          ],
+          "text": "Return-to-work status"
+        },
+        "subject": {
+          "reference": "{{ trigger.input.subject.reference }}"
+        },
+        "focus": [
+          {
+            "reference": "EpisodeOfCare/{{ actions.upsert-episode.episode.id }}"
+          }
+        ],
+        "derivedFrom": [
+          {
+            "reference": "QuestionnaireResponse/{{ trigger.input.id }}"
+          }
+        ],
+        "effectiveDateTime": "{{ actions.parse-intake.incidentDateTime }}",
+        "valueCodeableConcept": {
+          "coding": [
+            {
+              "system": "{{ variables.codeSystem }}",
+              "code": "{{ actions.parse-intake.returnToWorkStatus.code }}",
+              "display": "{{ actions.parse-intake.returnToWorkStatus.display }}"
+            }
+          ],
+          "text": "{{ actions.parse-intake.returnToWorkStatus.display }}"
+        }
+      }
+    },
+    {
+      "id": "upsert-task",
+      "type": "upsert-by-identifier",
+      "name": "Upsert Task",
+      "resourceType": "Task",
+      "identifier": {
+        "system": "{{ variables.caseIdentifierSystem }}",
+        "value": "{{ variables.caseKey }}"
+      },
+      "writeResultTo": "task",
+      "resource": {
+        "resourceType": "Task",
+        "status": "requested",
+        "intent": "order",
+        "identifier": [
+          {
+            "system": "{{ variables.caseIdentifierSystem }}",
+            "value": "{{ variables.caseKey }}"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "{{ variables.codeSystem }}",
+              "code": "rtw-follow-up",
+              "display": "RTW case follow-up"
+            }
+          ],
+          "text": "RTW case follow-up"
+        },
+        "for": {
+          "reference": "{{ trigger.input.subject.reference }}"
+        },
+        "focus": {
+          "reference": "EpisodeOfCare/{{ actions.upsert-episode.episode.id }}"
+        },
+        "encounter": {
+          "reference": "Encounter/{{ actions.upsert-encounter.encounter.id }}"
+        },
+        "basedOn": [
+          {
+            "reference": "QuestionnaireResponse/{{ trigger.input.id }}"
+          }
+        ],
+        "authoredOn": "{{ actions.parse-intake.incidentDateTime }}",
+        "owner": {
+          "reference": "{{ variables.demoProviderReference }}"
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "status": "applied",
+    "caseKey": "{{ variables.caseKey }}",
+    "episode": "EpisodeOfCare/{{ actions.upsert-episode.episode.id }}",
+    "encounter": "Encounter/{{ actions.upsert-encounter.encounter.id }}",
+    "serviceRequest": "ServiceRequest/{{ actions.upsert-service-request.serviceRequest.id }}",
+    "observation": "Observation/{{ actions.upsert-observation.observation.id }}",
+    "task": "Task/{{ actions.upsert-task.task.id }}"
+  }
+}

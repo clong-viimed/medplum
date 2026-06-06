@@ -1,0 +1,517 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hiivecare.example/schemas/no-code-bot-workflow-v1.json",
+  "title": "No-Code Bot Workflow v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "workflowId",
+    "name",
+    "trigger",
+    "actions"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "workflowId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "runMode": {
+      "type": "string",
+      "enum": [
+        "bot-membership",
+        "run-as-user"
+      ],
+      "default": "bot-membership"
+    },
+    "trigger": {
+      "$ref": "#/$defs/trigger"
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/valueExpr"
+      }
+    },
+    "variables": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/valueExpr"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/action"
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/valueExpr"
+      }
+    }
+  },
+  "$defs": {
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference"
+      ],
+      "properties": {
+        "reference": {
+          "type": "string",
+          "pattern": "^[A-Za-z]+/.+"
+        }
+      }
+    },
+    "valueExpr": {
+      "description": "Literal value or expression string resolved by the no-code engine.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/valueExpr"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/valueExpr"
+          }
+        }
+      ]
+    },
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "subscription",
+            "cron",
+            "webhook",
+            "custom-operation"
+          ]
+        },
+        "resourceType": {
+          "type": "string"
+        },
+        "criteria": {
+          "type": "string"
+        },
+        "contentType": {
+          "type": "string"
+        },
+        "cron": {
+          "type": "string"
+        },
+        "operationCode": {
+          "type": "string"
+        }
+      }
+    },
+    "resourceTemplate": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "resourceType"
+      ],
+      "properties": {
+        "resourceType": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "identifierKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system",
+        "value"
+      ],
+      "properties": {
+        "system": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "whenClause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expr"
+      ],
+      "properties": {
+        "expr": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "action": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/setVariableAction"
+        },
+        {
+          "$ref": "#/$defs/parseQuestionnaireResponseAction"
+        },
+        {
+          "$ref": "#/$defs/upsertByIdentifierAction"
+        },
+        {
+          "$ref": "#/$defs/createResourceAction"
+        },
+        {
+          "$ref": "#/$defs/updateResourceAction"
+        },
+        {
+          "$ref": "#/$defs/branchAction"
+        }
+      ]
+    },
+    "baseAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/$defs/whenClause"
+        }
+      }
+    },
+    "setVariableAction": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseAction"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "variable",
+            "value"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "set-variable"
+            },
+            "name": {
+              "type": "string"
+            },
+            "when": {
+              "$ref": "#/$defs/whenClause"
+            },
+            "variable": {
+              "type": "string",
+              "minLength": 1
+            },
+            "value": {
+              "$ref": "#/$defs/valueExpr"
+            }
+          }
+        }
+      ]
+    },
+    "parseQuestionnaireResponseAction": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseAction"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "input",
+            "fieldMap"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "parse-questionnaire-response"
+            },
+            "name": {
+              "type": "string"
+            },
+            "when": {
+              "$ref": "#/$defs/whenClause"
+            },
+            "input": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fieldMap": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "linkId",
+                  "kind"
+                ],
+                "properties": {
+                  "linkId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "choice",
+                      "string",
+                      "date",
+                      "dateTime",
+                      "boolean",
+                      "integer",
+                      "decimal"
+                    ]
+                  },
+                  "required": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "fallback": {
+                    "$ref": "#/$defs/valueExpr"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "upsertByIdentifierAction": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseAction"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "resourceType",
+            "identifier",
+            "resource"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "upsert-by-identifier"
+            },
+            "name": {
+              "type": "string"
+            },
+            "when": {
+              "$ref": "#/$defs/whenClause"
+            },
+            "resourceType": {
+              "type": "string",
+              "minLength": 1
+            },
+            "identifier": {
+              "$ref": "#/$defs/identifierKey"
+            },
+            "resource": {
+              "$ref": "#/$defs/resourceTemplate"
+            },
+            "writeResultTo": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "createResourceAction": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseAction"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "resource"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "create-resource"
+            },
+            "name": {
+              "type": "string"
+            },
+            "when": {
+              "$ref": "#/$defs/whenClause"
+            },
+            "resource": {
+              "$ref": "#/$defs/resourceTemplate"
+            },
+            "writeResultTo": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "updateResourceAction": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseAction"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "resource"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "update-resource"
+            },
+            "name": {
+              "type": "string"
+            },
+            "when": {
+              "$ref": "#/$defs/whenClause"
+            },
+            "resource": {
+              "$ref": "#/$defs/resourceTemplate"
+            },
+            "writeResultTo": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "branchAction": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseAction"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "branches"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "branch"
+            },
+            "name": {
+              "type": "string"
+            },
+            "when": {
+              "$ref": "#/$defs/whenClause"
+            },
+            "branches": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "when",
+                  "actions"
+                ],
+                "properties": {
+                  "when": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/action"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

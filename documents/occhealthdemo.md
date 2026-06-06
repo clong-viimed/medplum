@@ -1041,6 +1041,98 @@ Current kickoff status:
 
 **Implementation status**: Complete for the current demo slice. The manifest includes direct patient, task, case, RTW observation, exposure location, occupational summary, exposure dashboard, and supervisor summary URLs. The reset script validates the curated RTW case and Headquarters exposure cohort, repairs the provider access policy, and upgrades `OccupationalIncidentIntakeQuestionnaire` with the RTW and restriction fields needed by the Provider intake flow.
 
+### WS-11A: Bot-Driven Occupational Incident Intake Automation
+
+**Goal**: Replace the remaining manual post-submit curation step with a bot workflow that turns `QuestionnaireResponse` submissions into a complete occupational case graph.
+
+**Scope**:
+
+- Trigger automatically when `OccupationalIncidentIntakeQuestionnaire` is submitted.
+- Parse the questionnaire into a canonical incident intake payload.
+- Create or update the linked case records:
+   - `EpisodeOfCare` for the incident/case container.
+   - `Encounter` for the intake interaction.
+   - `ServiceRequest` for occupational follow-up.
+   - `Observation` resources for RTW and restriction status.
+   - `Task` resources for provider triage and RTW follow-up.
+- Make the workflow idempotent so repeated submissions update the same case instead of duplicating it.
+- Keep the current demo read paths and privacy model unchanged.
+
+**Proposed bot workflow**:
+
+1. A Medplum `Subscription` or equivalent bot trigger watches for new `QuestionnaireResponse` resources that reference `OccupationalIncidentIntakeQuestionnaire`.
+2. The bot loads the response, validates the required answers, and maps the curated linkIds to a normalized intake object.
+3. The bot derives an incident key from the patient, incident date/time, incident type, component, and duty location.
+4. The bot searches for an existing open episode using that incident key and either updates the existing case or creates a new case graph.
+5. The bot writes or updates the follow-up `Task`, RTW `Observation`, and intake `ServiceRequest` so provider workflows and dashboards pick up the new work automatically.
+6. The bot logs a correlation id based on the `QuestionnaireResponse` id so retries and support triage are straightforward.
+
+**Clean flow diagram**:
+
+```mermaid
+flowchart LR
+   Q[OccupationalIncidentIntakeQuestionnaire] --> QR[QuestionnaireResponse]
+   QR --> S[Subscription]
+   S --> B[Bot]
+   B --> E[EpisodeOfCare]
+   B --> C[Encounter]
+   B --> SR[ServiceRequest]
+   B --> T[Task]
+   B --> O[Observation]
+   E --> P[Provider workflow]
+   T --> P
+   O --> P
+```
+
+**Implementation slices**:
+
+- **Slice 1: Trigger and routing**
+   - Add a bot entry point for the questionnaire submission event.
+   - Restrict the trigger to the occupational incident intake questionnaire only.
+   - Keep the bot disabled or in dry-run mode until the workflow is validated.
+   - Implemented in the curation script as a trigger-only Medplum bot plus `Subscription` scaffold.
+
+- **Slice 2: Questionnaire parsing**
+   - Map the curated linkIds already present in `scripts/curate-occhealth-demo.mjs` to a canonical incident payload.
+   - Validate required fields and surface deterministic failures for missing incident metadata.
+   - Normalize RTW and restriction selections so downstream records use the same code set as the curated demo.
+
+- **Slice 3: Idempotent case lookup**
+   - Derive a stable case key from subject + incident timestamp + incident type + component/location.
+   - Search for an open `EpisodeOfCare` with that key before creating anything new.
+   - Update the existing case graph on repeat submission instead of creating duplicates.
+
+- **Slice 4: Resource orchestration**
+   - Upsert `EpisodeOfCare` and `Encounter` first.
+   - Upsert `ServiceRequest`, `Observation`, and `Task` resources next.
+   - Attach the created resources back to the originating `QuestionnaireResponse` through references or identifiers for traceability.
+
+- **Slice 5: Demo safety and privacy**
+   - Keep the existing provider and supervisor access model intact.
+   - Ensure the bot writes only the fields required for the provider workflow and minimum-necessary summaries.
+   - Verify the supervisor view still omits diagnosis, note, lab, and document detail.
+
+- **Slice 6: Validation and rollout**
+   - Add a dry-run mode that parses the questionnaire and reports the case graph without writing resources.
+   - Add replay-safe validation so repeated submissions are safe.
+   - Add a demo reset check that confirms the bot trigger is present before rehearsal.
+
+**Current implementation status**: slice 1 is wired through the demo curation script, and slices 2 through 6 are implemented in the occupational intake bot handler.
+
+**Deliverables**:
+
+- Bot design and implementation checklist.
+- Questionnaire-to-case mapping contract.
+- Idempotent case key and retry policy.
+- Demo validation notes for submit-to-case automation.
+
+**Definition of done**:
+
+- Submitting the occupational incident intake questionnaire automatically creates or updates the case workflow.
+- The demo no longer requires manual follow-up creation after questionnaire submission.
+- Repeat submissions do not create duplicate episodes, encounters, or tasks.
+- The provider and supervisor views continue to render the same privacy-safe outputs.
+
 ### WS-12: Validation, Dry Run, and Release Readiness
 
 **Goal**: Prove the demo works end to end before Industry Day.
