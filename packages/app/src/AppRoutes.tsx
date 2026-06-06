@@ -61,10 +61,13 @@ import { ToolsPage } from './resource/ToolsPage';
 import { SecurityPage } from './SecurityPage';
 import { SetPasswordPage } from './SetPasswordPage';
 import { SignInPage } from './SignInPage';
+import { SignOutPage } from './SignOutPage';
 import { SmartSearchPage } from './SmartSearchPage';
 import { VerifyEmailPage } from './VerifyEmailPage';
 
 export function AppRoutes(): JSX.Element {
+  const isDev = import.meta.env.DEV;
+
   return (
     <Routes>
       <Route errorElement={<ErrorPage />}>
@@ -74,6 +77,8 @@ export function AppRoutes(): JSX.Element {
         <Route path="/setpassword/:id/:secret" element={<SetPasswordPage />} />
         <Route path="/verifyemail/:id/:secret" element={<VerifyEmailPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        {isDev && <Route path="/logout" element={<SignOutPage />} />}
+        {isDev && <Route path="/signout" element={<SignOutPage />} />}
         <Route path="/changepassword" element={<ChangePasswordPage />} />
         <Route path="/security" element={<SecurityPage />} />
         <Route path="/mfa" element={<MfaPage />} />

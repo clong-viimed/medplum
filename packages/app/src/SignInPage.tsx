@@ -7,6 +7,8 @@ import { useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { getConfig, isRegisterEnabled } from './config';
 
+const DISALLOWED_NEXT_PATHS = new Set(['/logout', '/signout', '/signin', '/oauth']);
+
 export function SignInPage(): JSX.Element {
   const profile = useMedplumProfile();
   const navigate = useNavigate();
@@ -17,7 +19,10 @@ export function SignInPage(): JSX.Element {
     // only redirect to next if it is a pathname to avoid redirecting
     // to a maliciously crafted URL, e.g. /signin?next=https%3A%2F%2Fevil.com
     const nextUrl = searchParams.get('next');
-    navigate(nextUrl?.startsWith('/') ? nextUrl : '/')?.catch(console.error);
+    const nextPath = nextUrl?.startsWith('/') ? nextUrl : '/';
+    const nextPathname = nextPath.split('?')[0].split('#')[0];
+    const safeNextPath = import.meta.env.DEV && DISALLOWED_NEXT_PATHS.has(nextPathname) ? '/' : nextPath;
+    navigate(safeNextPath)?.catch(console.error);
   }, [searchParams, navigate]);
 
   useEffect(() => {

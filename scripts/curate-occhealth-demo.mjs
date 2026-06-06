@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { MedplumClient, normalizeErrorString } from '@medplum/core';
+import { ContentType, getReferenceString, MedplumClient, normalizeErrorString } from '@medplum/core';
+import { readFileSync } from 'fs';
 
 const DEFAULT_BASE_URL = 'https://api.ehr.hiivehealth.net/';
 const DEFAULT_PROJECT_ID = '7e472dfd-3ab9-4b75-adac-38e0c5c5d6c8';
@@ -8,6 +9,12 @@ const INCIDENT_QUESTIONNAIRE_NAME = 'OccupationalIncidentIntakeQuestionnaire';
 const INCIDENT_QUESTIONNAIRE_TITLE = 'Occupational incident intake';
 const VISIT_CARE_TEMPLATE_URL = 'https://hiivecare.example/fhir/PlanDefinition/occupational-exposure-follow-up-visit';
 const SUPERVISOR_MEMBERSHIP_IDENTIFIER = 'supervisor-hr-demo-membership';
+const INCIDENT_BOT_IDENTIFIER = 'occupational-incident-intake-processor';
+const INCIDENT_BOT_NAME = 'Occupational Incident Intake Processor';
+const INCIDENT_BOT_DESCRIPTION = 'Routes occupational incident QuestionnaireResponse submissions into the next workflow slice.';
+const INCIDENT_BOT_RUNTIME_VERSION = 'vmcontext';
+const INCIDENT_SUBSCRIPTION_IDENTIFIER = 'occupational-incident-intake-trigger';
+const INCIDENT_BOT_CODE_URL = new URL('./occupational-intake-bot.js', import.meta.url);
 
 const DEMO = {
   providerAccessPolicy: {
@@ -335,6 +342,20 @@ async function main() {
   );
 
   changes.push(await runStep('upsert incident questionnaire', () => applyIncidentQuestionnaireUpsert(medplum)));
+
+  const incidentQuestionnaire = await runStep('read curated incident questionnaire', () =>
+    getIncidentQuestionnaire(medplum)
+  );
+  const incidentBotResult = await runStep('upsert incident intake bot', () => applyIncidentIntakeBotUpsert(medplum));
+  changes.push(incidentBotResult.change);
+  if (incidentQuestionnaire && incidentBotResult.resource?.id) {
+    changes.push(
+      await runStep('upsert incident intake subscription', () =>
+        applyIncidentIntakeSubscriptionUpsert(medplum, incidentQuestionnaire, incidentBotResult.resource)
+      )
+    );
+  }
+
   changes.push(await runStep('upsert visit care template', () => applyVisitCareTemplateUpsert(medplum)));
 
   const supervisorPolicyResult = await runStep('upsert supervisor/HR access policy', () =>
@@ -512,6 +533,75 @@ async function applyVisitCareTemplateUpsert(medplum) {
   return applyResourceUpdate(medplum, desiredTemplate, currentTemplate, label);
 }
 
+async function applyIncidentIntakeBotUpsert(medplum) {
+  const label = 'incident intake bot';
+  const currentBot = (await findIncidentIntakeBot(medplum)) || undefined;
+  const desiredBot = buildIncidentIntakeBot(currentBot);
+  const botCode = readFileSync(INCIDENT_BOT_CODE_URL, 'utf8');
+
+  if (!currentBot) {
+    if (args.validateOnly) {
+      return { change: { label, status: 'needs update' }, resource: undefined };
+    }
+    if (args.dryRun) {
+      return { change: { label, status: 'would create' }, resource: desiredBot };
+    }
+
+    const projectId = process.env.MEDPLUM_PROJECT_ID || DEFAULT_PROJECT_ID;
+    const createdBot = await medplum.post('admin/projects/' + projectId + '/bot', {
+      name: INCIDENT_BOT_NAME,
+      description: INCIDENT_BOT_DESCRIPTION,
+    });
+
+    if (createdBot.resourceType !== 'Bot') {
+      throw new Error(`Error creating incident intake bot: ${normalizeErrorString(createdBot)}`);
+    }
+
+    const updatedBot = await medplum.updateResource({
+      ...createdBot,
+      ...desiredBot,
+      id: createdBot.id,
+    });
+
+    await medplum.post(medplum.fhirUrl('Bot', updatedBot.id, '$deploy'), {
+      code: botCode,
+      filename: 'occupational-intake-bot.js',
+    });
+
+    return { change: { label, status: 'created' }, resource: updatedBot };
+  }
+
+  const change = await applyResourceUpdate(medplum, desiredBot, currentBot, label);
+
+  if (!args.validateOnly && !args.dryRun) {
+    await medplum.post(medplum.fhirUrl('Bot', currentBot.id, '$deploy'), {
+      code: botCode,
+      filename: 'occupational-intake-bot.js',
+    });
+  }
+
+  return { change, resource: currentBot };
+}
+
+async function applyIncidentIntakeSubscriptionUpsert(medplum, questionnaire, bot) {
+  const label = 'incident intake subscription';
+  const currentSubscription = (await findIncidentIntakeSubscription(medplum)) || undefined;
+  const desiredSubscription = buildIncidentIntakeSubscription(questionnaire, bot, currentSubscription);
+
+  if (!currentSubscription) {
+    if (args.validateOnly) {
+      return { label, status: 'needs update' };
+    }
+    if (args.dryRun) {
+      return { label, status: 'would create' };
+    }
+    await medplum.createResource(desiredSubscription);
+    return { label, status: 'created' };
+  }
+
+  return applyResourceUpdate(medplum, desiredSubscription, currentSubscription, label);
+}
+
 async function applySupervisorAccessPolicyUpsert(medplum) {
   const label = 'supervisor/HR minimum-necessary policy';
   const currentPolicy = await findSupervisorAccessPolicy(medplum);
@@ -615,6 +705,62 @@ async function applySupervisorLoginUpsert(medplum, supervisorPolicy) {
     currentMembership,
     label
   );
+}
+
+async function findIncidentIntakeBot(medplum) {
+  return medplum.searchOne('Bot', {
+    identifier: `${CODE_SYSTEM}|${INCIDENT_BOT_IDENTIFIER}`,
+  });
+}
+
+async function findIncidentIntakeSubscription(medplum) {
+  const subscriptions = await medplum.searchResources(
+    'Subscription',
+    new URLSearchParams([
+      ['status', 'active'],
+      ['_count', '100'],
+    ])
+  );
+  return subscriptions.find(
+    (subscription) =>
+      subscription.reason === 'Occupational incident intake trigger' &&
+      subscription.criteria?.startsWith('QuestionnaireResponse?questionnaire=Questionnaire/') &&
+      subscription.channel?.endpoint?.startsWith('Bot/')
+  );
+}
+
+function buildIncidentIntakeBot(currentBot) {
+  const updated = cloneResource(currentBot || { resourceType: 'Bot' });
+  updated.name = INCIDENT_BOT_NAME;
+  updated.description = INCIDENT_BOT_DESCRIPTION;
+  updated.identifier = mergeIdentifiers(updated.identifier, demoIdentifier(INCIDENT_BOT_IDENTIFIER));
+  updated.runtimeVersion = INCIDENT_BOT_RUNTIME_VERSION;
+  return updated;
+}
+
+function buildIncidentIntakeSubscription(questionnaire, bot, currentSubscription) {
+  const updated = cloneResource(currentSubscription || { resourceType: 'Subscription' });
+  updated.status = 'active';
+  updated.reason = 'Occupational incident intake trigger';
+  updated.criteria = `QuestionnaireResponse?questionnaire=${questionnaire.resourceType}/${questionnaire.id}`;
+  updated.channel = {
+    type: 'rest-hook',
+    endpoint: getReferenceString(bot),
+    payload: ContentType.FHIR_JSON,
+  };
+  return updated;
+}
+
+async function getIncidentQuestionnaire(medplum) {
+  const questionnaires = await medplum.searchResources(
+    'Questionnaire',
+    new URLSearchParams([
+      ['name', INCIDENT_QUESTIONNAIRE_NAME],
+      ['_count', '20'],
+      ['_sort', '-_lastUpdated'],
+    ])
+  );
+  return selectIncidentQuestionnaire(questionnaires);
 }
 
 async function findSupervisorAccessPolicy(medplum) {
@@ -841,13 +987,15 @@ async function validateCuratedState(medplum) {
   const failures = [];
   const warnings = [];
 
-  const [accessPolicy, patient, provider, episode, task, observation] = await Promise.all([
+  const [accessPolicy, patient, provider, episode, task, observation, incidentBot, incidentSubscription] = await Promise.all([
     medplum.readResource('AccessPolicy', DEMO.providerAccessPolicy.id),
     medplum.readResource('Patient', DEMO.patient.id),
     medplum.readResource('Practitioner', DEMO.provider.id),
     medplum.readResource('EpisodeOfCare', DEMO.episode.id),
     medplum.readResource('Task', DEMO.task.id),
     medplum.readResource('Observation', DEMO.observation.id),
+    findIncidentIntakeBot(medplum),
+    findIncidentIntakeSubscription(medplum),
   ]);
 
   for (const [resourceType, requiredInteractions] of Object.entries(REQUIRED_PROVIDER_RESOURCE_INTERACTIONS)) {
@@ -876,6 +1024,32 @@ async function validateCuratedState(medplum) {
       if (!questionnaireLinkIds.has(linkId)) {
         failures.push(`${INCIDENT_QUESTIONNAIRE_NAME} missing item ${linkId}`);
       }
+    }
+  }
+
+  if (!incidentBot) {
+    failures.push('incident intake bot is missing');
+  } else {
+    if (incidentBot.name !== INCIDENT_BOT_NAME) {
+      failures.push(`incident intake bot name is ${incidentBot.name || 'unset'}`);
+    }
+    if (incidentBot.runtimeVersion !== INCIDENT_BOT_RUNTIME_VERSION) {
+      failures.push(`incident intake bot runtime is ${incidentBot.runtimeVersion || 'unset'}`);
+    }
+  }
+
+  if (!incidentSubscription) {
+    failures.push('incident intake subscription is missing');
+  } else if (incidentQuestionnaire && incidentBot) {
+    const expectedCriteria = `QuestionnaireResponse?questionnaire=Questionnaire/${incidentQuestionnaire.id}`;
+    if (incidentSubscription.criteria !== expectedCriteria) {
+      failures.push(`incident intake subscription criteria is ${incidentSubscription.criteria || 'unset'}`);
+    }
+    if (incidentSubscription.channel?.endpoint !== getReferenceString(incidentBot)) {
+      failures.push(`incident intake subscription endpoint is ${incidentSubscription.channel?.endpoint || 'unset'}`);
+    }
+    if (incidentSubscription.status !== 'active') {
+      failures.push(`incident intake subscription status is ${incidentSubscription.status || 'unset'}`);
     }
   }
 
@@ -975,6 +1149,8 @@ async function validateCuratedState(medplum) {
       visitCareTemplate: visitCareTemplate?.id,
       supervisorAccessPolicy: supervisorPolicy?.id,
       supervisorLogin: supervisorMembership?.userName || DEMO.supervisor.email,
+      incidentBot: incidentBot?.id,
+      incidentSubscription: incidentSubscription?.id,
     },
   };
 }
@@ -1120,6 +1296,8 @@ function printSummary(changes, validation) {
     console.log(`${change.status}: ${change.label}`);
   }
   console.log(`provider open task count: ${validation.resources.providerOpenTaskCount ?? 'unknown'}`);
+  console.log(`incident intake bot: ${validation.resources.incidentBot ?? 'missing'}`);
+  console.log(`incident intake subscription: ${validation.resources.incidentSubscription ?? 'missing'}`);
   console.log(`supervisor/HR login: ${validation.resources.supervisorLogin ?? 'missing'}`);
   console.log(`supervisor/HR policy: ${validation.resources.supervisorAccessPolicy ?? 'missing'}`);
   console.log(`visit care template: ${validation.resources.visitCareTemplate ?? 'missing'}`);
