@@ -10,6 +10,120 @@ Related artifacts:
 - Option ID catalog: [documents/no-code-bot-builder/option-id-catalog-v1.md](documents/no-code-bot-builder/option-id-catalog-v1.md)
 - Versioning policy: [documents/no-code-bot-builder/versioning-and-compatibility-policy.md](documents/no-code-bot-builder/versioning-and-compatibility-policy.md)
 
+## High-Level Occupational Intake Bot Architecture
+
+```mermaid
+flowchart LR
+		Q[QuestionnaireResponse Created] --> S[Subscription Trigger]
+		S --> B[Medplum Bot Runtime]
+		B --> E1[Upsert EpisodeOfCare by caseKey]
+		B --> E2[Upsert Encounter by caseKey]
+		B --> E3[Upsert ServiceRequest by caseKey]
+		B --> E4[Upsert Observation by caseKey]
+		B --> E5[Upsert Task by caseKey]
+
+		subgraph Builder Control Plane
+			UI[No-Code Builder UI]
+			CAT[Option ID Catalog]
+			SCHEMA[Workflow Schema]
+			VAL[Validation and Publish]
+			UI --> CAT
+			UI --> SCHEMA
+			UI --> VAL
+			VAL --> DEPLOY[Bot + Subscription Deployment]
+		end
+
+		DEPLOY --> B
+		E1 --> OUT[Result Payload: references + caseKey]
+		E2 --> OUT
+		E3 --> OUT
+		E4 --> OUT
+		E5 --> OUT
+```
+
+## Configuration to Runtime Workflow
+
+```mermaid
+flowchart TD
+		A[Admin selects outcomes] --> B[Wizard emits structured workflow JSON]
+		B --> C[Validate schema and option IDs]
+		C --> D[Publish workflow version]
+		D --> E[Deploy bot and subscription]
+		E --> F[Receive QuestionnaireResponse event]
+		F --> G[Extract variables and compute caseKey]
+		G --> H[Execute ordered upserts]
+		H --> I[Return references and status]
+```
+
+## End-to-End Sequence
+
+```mermaid
+sequenceDiagram
+		participant Admin as Admin User
+		participant Builder as No-Code Builder UI
+		participant Publish as Publish Service
+		participant Sub as Subscription Engine
+		participant Bot as Bot Runtime
+		participant FHIR as FHIR Server
+
+		Admin->>Builder: Configure wizard steps and action blocks
+		Builder->>Publish: Submit validated workflow
+		Publish->>Sub: Create/Update QuestionnaireResponse subscription
+		Publish->>Bot: Deploy bot bundle
+		Sub->>Bot: Trigger on QuestionnaireResponse create/update
+		Bot->>FHIR: Upsert EpisodeOfCare
+		Bot->>FHIR: Upsert Encounter
+		Bot->>FHIR: Upsert ServiceRequest
+		Bot->>FHIR: Upsert Observation
+		Bot->>FHIR: Upsert Task
+		FHIR-->>Bot: Return resource references
+		Bot-->>Sub: Return structured result payload
+```
+
+## Builder Domain Model
+
+```mermaid
+classDiagram
+		class WorkflowDefinition {
+			+id: string
+			+schemaVersion: string
+			+trigger: TriggerConfig
+			+steps: StepConfig[]
+			+result: ResultConfig
+		}
+
+		class TriggerConfig {
+			+type: string
+			+criteria: string
+			+contentType: string
+			+resourceType: string
+		}
+
+		class StepConfig {
+			+id: string
+			+kind: string
+			+saveAs: string
+		}
+
+		class UpsertStep {
+			+resourceType: string
+			+identifierSystem: string
+			+identifierValue: string
+			+template: object
+		}
+
+		class RuntimeResult {
+			+status: string
+			+caseKey: string
+			+references: string[]
+		}
+
+		WorkflowDefinition "1" --> "1" TriggerConfig
+		WorkflowDefinition "1" --> "many" StepConfig
+		StepConfig <|-- UpsertStep
+		WorkflowDefinition --> RuntimeResult : produces
+```
+
 ## Product Goal
 
 Allow an admin to configure bot behavior without writing code by composing typed action blocks.

@@ -9,6 +9,76 @@ This policy defines how workflow schema and option catalogs evolve without break
 - Enable additive feature rollout with predictable compatibility.
 - Prefer Medplum-native features and keep custom extension surfaces minimal.
 
+## Compatibility Decision Workflow
+
+```mermaid
+flowchart TD
+		A[Proposed schema or catalog change] --> B{Is change additive only?}
+		B -- Yes --> C[Minor version bump]
+		B -- No --> D{Does it alter existing field or ID semantics?}
+		D -- Yes --> E[Major version bump + migration tooling]
+		D -- No --> F[Patch version bump]
+		C --> G[Run compatibility validation suite]
+		E --> G
+		F --> G
+		G --> H[Publish docs, catalog, and release notes]
+```
+
+## Runtime Compatibility Sequence
+
+```mermaid
+sequenceDiagram
+		participant UI as Builder UI
+		participant Registry as Version Registry
+		participant Validator as Compatibility Validator
+		participant Runtime as Bot Runtime
+
+		UI->>Registry: Submit workflow schemaVersion and catalogVersion
+		Registry-->>UI: Return support matrix
+		UI->>Validator: Validate version compatibility
+		Validator-->>UI: Error/Warning/Info results
+		UI->>Runtime: Publish workflow if no errors
+		Runtime-->>UI: Store workflow with version metadata
+```
+
+## Versioning Model
+
+```mermaid
+classDiagram
+		class WorkflowArtifact {
+			+schemaVersion: string
+			+schemaCatalogVersion: string
+			+presetVersion: string
+		}
+
+		class OptionCatalog {
+			+catalogVersion: string
+			+entries: OptionEntry[]
+		}
+
+		class OptionEntry {
+			+id: string
+			+status: active|deprecated
+			+replacementId: string?
+		}
+
+		class CompatibilityWindow {
+			+currentMajor: int
+			+previousMajor: int
+			+cutoverDate: date
+		}
+
+		class MigrationMap {
+			+fromMajor: int
+			+toMajor: int
+			+transforms: map
+		}
+
+		WorkflowArtifact --> OptionCatalog : references
+		OptionCatalog "1" --> "many" OptionEntry
+		CompatibilityWindow --> MigrationMap : triggers when major changes
+```
+
 ## Versioned Artifacts
 
 The following are independently versioned:

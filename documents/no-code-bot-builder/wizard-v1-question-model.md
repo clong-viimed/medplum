@@ -14,6 +14,80 @@ Versioned references:
 - [documents/no-code-bot-builder/option-id-catalog-v1.md](documents/no-code-bot-builder/option-id-catalog-v1.md)
 - [documents/no-code-bot-builder/versioning-and-compatibility-policy.md](documents/no-code-bot-builder/versioning-and-compatibility-policy.md)
 
+## Wizard Workflow Diagram
+
+```mermaid
+flowchart TD
+		S0[Step 0 Metadata] --> S1[Step 1 Outcome Selection]
+		S1 --> S2[Step 2 Trigger Selection]
+		S2 --> S3[Step 3 Input Type]
+		S3 --> S4[Step 4 Source Mapping]
+		S4 --> S5[Step 5 Idempotency]
+		S5 --> S6[Step 6 Action Blocks]
+		S6 --> S7[Step 7 Execution Context and Access]
+		S7 --> S8[Step 8 Output Shape]
+		S8 --> S9[Step 9 Review and Publish]
+		S9 --> P{Validation Passes?}
+		P -- No --> S4
+		P -- Yes --> PUB[Publish Workflow]
+```
+
+## Wizard Interaction Sequence
+
+```mermaid
+sequenceDiagram
+		participant Admin as Admin User
+		participant Wizard as Wizard UI
+		participant Catalog as Option Catalog
+		participant Validator as Validation Engine
+		participant Publisher as Publish Service
+
+		Admin->>Wizard: Answer structured questions
+		Wizard->>Catalog: Resolve option IDs and presets
+		Catalog-->>Wizard: Return allowed selections
+		Admin->>Wizard: Complete steps 1-9
+		Wizard->>Validator: Run hard and safety validation
+		Validator-->>Wizard: Errors/Warnings/Info
+		Wizard-->>Admin: Show readiness state
+		Admin->>Publisher: Publish
+		Publisher-->>Admin: Workflow version created
+```
+
+## Wizard Model Diagram
+
+```mermaid
+classDiagram
+		class WizardDefinition {
+			+version: string
+			+steps: WizardStep[]
+		}
+
+		class WizardStep {
+			+id: string
+			+title: string
+			+inputMode: structured|freeText
+			+questions: Question[]
+			+required: boolean
+		}
+
+		class Question {
+			+key: string
+			+prompt: string
+			+controlType: dropdown|radio|checklist|builder
+			+optionSource: string
+		}
+
+		class ValidationRule {
+			+severity: error|warning|info
+			+expression: string
+			+message: string
+		}
+
+		WizardDefinition "1" --> "many" WizardStep
+		WizardStep "1" --> "many" Question
+		WizardDefinition "1" --> "many" ValidationRule
+```
+
 ## Step 0: Bot Metadata
 
 Question:

@@ -12,6 +12,72 @@ Scope:
 - Bot name and bot description remain the only free-text fields in the full wizard.
 - All values here are selected from dropdown, radio, checklist, or controlled pickers.
 
+## Step 6 Builder Workflow
+
+```mermaid
+flowchart TD
+		A[Select action resource] --> B[Load required field set]
+		B --> C[Apply global controls]
+		C --> D[Select per-field option IDs]
+		D --> E{All required fields selected?}
+		E -- No --> F[Show inline validation errors]
+		F --> D
+		E -- Yes --> G[Apply occupational defaults if preset selected]
+		G --> H[Persist structured action block]
+```
+
+## Action Configuration Sequence
+
+```mermaid
+sequenceDiagram
+		participant Admin as Admin User
+		participant UI as Step 6 Form
+		participant Catalog as Option Catalog
+		participant Validator as Publish Validator
+
+		Admin->>UI: Add EpisodeOfCare action
+		UI->>Catalog: Request allowed options for EpisodeOfCare
+		Catalog-->>UI: Return status/identifier/template options
+		Admin->>UI: Choose values from controls
+		UI->>Validator: Validate required fields
+		Validator-->>UI: Pass with warnings/errors
+		UI-->>Admin: Save action block and validation state
+```
+
+## Step 6 Domain Model
+
+```mermaid
+classDiagram
+		class Step6ActionBlock {
+			+resourceType: ResourceType
+			+actionModeId: string
+			+identifierSystemId: string
+			+identifierValueStrategyId: string
+			+fieldSelections: FieldSelection[]
+		}
+
+		class FieldSelection {
+			+fieldKey: string
+			+optionId: string
+			+isRequired: boolean
+		}
+
+		class ResourceProfile {
+			+resourceType: ResourceType
+			+requiredFields: string[]
+			+optionalFields: string[]
+		}
+
+		class PresetProfile {
+			+presetId: string
+			+defaultOptionIds: map
+		}
+
+		Step6ActionBlock "1" --> "many" FieldSelection
+		Step6ActionBlock "many" --> "1" ResourceProfile
+		PresetProfile "many" --> "many" Step6ActionBlock : seeds defaults
+```
+
 ## Global Step 6 Controls
 
 Control: Action type

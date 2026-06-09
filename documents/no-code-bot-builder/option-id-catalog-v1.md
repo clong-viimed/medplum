@@ -13,6 +13,76 @@ Conventions:
 - Labels are display-only and may change.
 - Deprecated IDs are never reused.
 
+## Catalog Class Diagram
+
+```mermaid
+classDiagram
+    class OptionCatalog {
+      +catalogVersion: string
+      +generatedAt: datetime
+      +entries: OptionEntry[]
+    }
+
+    class OptionEntry {
+      +id: string
+      +label: string
+      +status: active|deprecated
+      +replacementId: string?
+      +domain: string
+      +category: string
+      +value: string
+    }
+
+    class Preset {
+      +id: string
+      +resourceActions: string[]
+      +defaultSelections: map
+    }
+
+    class WorkflowConfig {
+      +schemaVersion: string
+      +triggerTypeId: string
+      +actionModeId: string
+      +resourceOptionIds: string[]
+    }
+
+    OptionCatalog "1" --> "many" OptionEntry : contains
+    WorkflowConfig "many" --> "many" OptionEntry : references IDs
+    Preset "many" --> "many" OptionEntry : pins defaults
+```
+
+## Option Resolution Workflow
+
+```mermaid
+flowchart TD
+    A[Load workflow config] --> B[Collect referenced option IDs]
+    B --> C{ID exists in catalog?}
+    C -- Yes --> D{ID deprecated?}
+    D -- No --> E[Resolve current label and semantics]
+    D -- Yes --> F[Resolve legacy semantics and show warning]
+    C -- No --> G[Compatibility error]
+    E --> H[Render UI and execute runtime]
+    F --> H
+```
+
+## Label Evolution Sequence
+
+```mermaid
+sequenceDiagram
+    participant Admin as Admin User
+    participant UI as Builder UI
+    participant Catalog as Option Catalog
+    participant Runtime as Bot Runtime
+
+    Admin->>UI: Open saved workflow
+    UI->>Catalog: Fetch entries by ID
+    Catalog-->>UI: Return labels + status metadata
+    UI-->>Admin: Display updated labels
+    Admin->>UI: Publish without ID changes
+    UI->>Runtime: Submit workflow with stable option IDs
+    Runtime-->>UI: Accept and execute same semantics
+```
+
 ## ID Schema
 
 General pattern:

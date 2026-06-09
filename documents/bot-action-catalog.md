@@ -7,6 +7,75 @@ Scope notes:
 - A Bot can only read or write resources allowed by the Bot membership policy, or by the triggering user policy when runAsUser is true.
 - This catalog is based on repository docs and generated FHIR types in this codebase.
 
+## Capability Group Workflow
+
+```mermaid
+flowchart TD
+		A[Trigger action] --> B[Parse and validate input]
+		B --> C[Resolve execution context]
+		C --> D{Access policy allows action?}
+		D -- No --> E[Return OperationOutcome error]
+		D -- Yes --> F[Run FHIR and integration actions]
+		F --> G[Assemble output payload]
+		G --> H[Emit logs and execution outcome]
+```
+
+## Bot Runtime Action Sequence
+
+```mermaid
+sequenceDiagram
+		participant Source as Trigger Source
+		participant Bot as Medplum Bot Runtime
+		participant Policy as Access Policy Engine
+		participant FHIR as FHIR Server
+		participant External as External System
+
+		Source->>Bot: Invoke bot with input payload
+		Bot->>Policy: Evaluate permissions for requested actions
+		Policy-->>Bot: Allow or deny decision
+		alt FHIR actions allowed
+			Bot->>FHIR: Create/Read/Search/Update/Patch/Transaction
+			FHIR-->>Bot: Resource results
+		end
+		alt Integration actions selected
+			Bot->>External: HTTP/SFTP/Webhook operation
+			External-->>Bot: Response payload
+		end
+		Bot-->>Source: Return result or OperationOutcome
+```
+
+## Capability Model
+
+```mermaid
+classDiagram
+		class BotCapabilityCatalog {
+			+groups: CapabilityGroup[]
+			+runtimePrerequisites: string[]
+		}
+
+		class CapabilityGroup {
+			+name: string
+			+actions: CapabilityAction[]
+		}
+
+		class CapabilityAction {
+			+id: string
+			+inputTypes: string[]
+			+outputTypes: string[]
+			+requiresPolicy: boolean
+		}
+
+		class ExecutionContext {
+			+runMode: botMembership|runAsUser
+			+accessPolicyRef: string
+			+projectFeatures: string[]
+		}
+
+		BotCapabilityCatalog "1" --> "many" CapabilityGroup
+		CapabilityGroup "1" --> "many" CapabilityAction
+		CapabilityAction --> ExecutionContext : evaluated under
+```
+
 ## Group A: Invocation and Trigger Actions
 
 A Bot can be triggered by:
