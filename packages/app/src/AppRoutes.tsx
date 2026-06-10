@@ -61,6 +61,7 @@ import { ToolsPage } from './resource/ToolsPage';
 import { SecurityPage } from './SecurityPage';
 import { SetPasswordPage } from './SetPasswordPage';
 import { SignInPage } from './SignInPage';
+import { LogoutPage } from './LogoutPage';
 import { SmartSearchPage } from './SmartSearchPage';
 import { VerifyEmailPage } from './VerifyEmailPage';
 
@@ -147,6 +148,7 @@ export function AppRoutes(): JSX.Element {
           <Route path="accounts" element={<AccountsPage />} />
           <Route path="export" element={<ExportPage />} />
         </Route>
+        <Route path="/logout" element={<LogoutPage />} />
         <Route path="/:resourceType" element={<HomePage />} />
         <Route path="/" element={<HomePage />} />
       </Route>
