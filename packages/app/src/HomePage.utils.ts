@@ -29,8 +29,15 @@ export function addSearchValues(search: SearchRequest, config: UserConfiguration
 }
 
 function getDefaultResourceType(config: UserConfiguration | undefined): string {
+  const stored = localStorage.getItem('defaultResourceType');
+  // FHIR resource types always start with an uppercase letter.
+  // If the stored value is invalid (e.g. "logout" from a past routing bug), discard it.
+  const storedValid = stored && /^[A-Z]/.test(stored) ? stored : null;
+  if (storedValid === null && stored !== null) {
+    localStorage.removeItem('defaultResourceType');
+  }
   return (
-    localStorage.getItem('defaultResourceType') ??
+    storedValid ??
     config?.option?.find((o) => o.id === 'defaultResourceType')?.valueString ??
     'Patient'
   );
