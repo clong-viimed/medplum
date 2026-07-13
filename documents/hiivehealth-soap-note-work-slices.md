@@ -70,9 +70,9 @@ flowchart TB
 
 | Slice | Description | Output | Effort | Status |
 |-------|-------------|--------|--------|--------|
-| 1.1 | Create sample `Location` hierarchy (building → floor → room → station) for one facility | Seed data + documentation | Small | In Progress |
-| 1.2 | Add cascading Location selectors to `EncounterChart` and save selected station to `Encounter.location` | Updated chart UI | Small | |
-| 1.3 | Verify `EncounterChart` loads and saves location correctly | Test + demo | Small | |
+| 1.1 | Create sample `Location` hierarchy (building → floor → room → station) for one facility | Seed data + documentation | Small | Done |
+| 1.2 | Add cascading Location selectors to `EncounterChart` and save selected station to `Encounter.location` | Updated chart UI | Small | Done |
+| 1.3 | Verify `EncounterChart` loads and saves location correctly | Test + demo | Small | Pending |
 
 ## Phase 2 — Visit type and checklist
 
