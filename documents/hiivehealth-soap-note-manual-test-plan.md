@@ -127,7 +127,7 @@ node scripts/verify-location-hierarchy.mjs
 - Document assessment
 - Document plan / disposition
 
-Each Task has status `requested`.
+Each Task has status `requested`. The SOAP section cards (Subjective, Objective, Assessment, Plan, ROS) should **not** appear for a Sick Call encounter.
 
 **Backend verification**:
 ```bash
@@ -157,7 +157,7 @@ Expected output: `$apply created 1 CarePlan and 6 Tasks with status 'requested'`
 - Document assessment section
 - Document plan section
 
-Each Task has status `requested`. No occupational exposure or return-to-work tasks should appear.
+Each Task has status `requested`. The SOAP section cards (Subjective, Objective, Assessment, Plan, ROS) **should** appear for this encounter. No occupational exposure or return-to-work tasks should appear.
 
 **Backend verification**:
 ```bash
@@ -383,7 +383,7 @@ Use this shorter list for routine regression checks:
 | 403 from backend scripts | Run `aws sso login --profile hiive-build` |
 | Location dropdown empty | Verify seed data loaded: `node scripts/verify-location-hierarchy.mjs` |
 | Tasks not appearing | Verify the correct template: `node scripts/verify-sick-call-template.mjs` or `node scripts/verify-soap-template.mjs` |
-| Occupational template shows SOAP tasks | Restore the occupational template: `node scripts/restore-occupational-exposure-follow-up-visit.mjs` |
+| Occupational/Sick Call encounter shows SOAP cards | The chart now gates SOAP cards on the `SOAP Note Visit` care template. Verify `Encounter.extension` has the care-template URL. |
 | Composition not created | Check DevTools Network for `persistAll` errors; ensure all questionnaire responses save first |
 
 ---
