@@ -133,7 +133,7 @@ flowchart TB
 | Slice | Description | Output | Effort | Status |
 |-------|-------------|--------|--------|--------|
 | 8.1 | Confirm Sign / Sign & Close creates `Provenance` and sets `ClinicalImpression.status` = `completed` | Existing flow verified | Small | |
-| 8.2 | Optional: generate `Composition` referencing all extracted resources | Signed SOAP document | Medium | |
+| 8.2 | Generate `Composition` referencing all extracted resources during Sign & Close | Signed SOAP document | Medium | Done |
 
 ## Phase 9 — Polish and scale
 
@@ -162,4 +162,4 @@ flowchart TB
 - Responses extract into `Observation`, `Condition`, `CarePlan`, and `ServiceRequest`.
 - Orders (individual + order sets) can be added and viewed.
 - Patient disposition can be toggled per tenant and selected from a tenant-defined list.
-- Sign / Sign & Close creates `Provenance` and optionally generates a `Composition`.
+- Sign / Sign & Close creates `Provenance`, completes the `ClinicalImpression`, and generates a signed `Composition`.

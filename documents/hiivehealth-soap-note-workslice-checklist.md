@@ -60,7 +60,8 @@ Last updated: 2026-07-14
 ## Phase 8 — Signing and final document
 
 - [x] **8.1** Confirm Sign / Sign & Close creates `Provenance` and sets `ClinicalImpression.status` = `completed`
-- [x] **8.2** Optional `Composition` generation verified via script
+- [x] **8.2** Live `Composition` generation wired into Sign & Close in `EncounterChart`
+- [x] **8.3** `Composition` generation verified via script
 
 ## Phase 9 — Polish and scale
 
