@@ -178,17 +178,22 @@ function printHelp() {
 
 Loads the sample Location hierarchy (building -> floor -> room -> station/bed) into Medplum.
 
+IMPORTANT: Locations must be created inside the Ubix Data project so the provider demo user
+can read them. Use the ubix-data ClientApplication credentials (recommended). Do not use the
+super-admin account, because it is not a member of the Ubix Data project and will create
+resources in the wrong project.
+
 Environment variables:
   MEDPLUM_BASE_URL      Medplum server base URL (default: ${DEFAULT_BASE_URL})
   MEDPLUM_PROJECT_ID    Medplum project ID (default: ${DEFAULT_PROJECT_ID})
-  MEDPLUM_CLIENT_ID     Client application ID
+  MEDPLUM_CLIENT_ID     Client application ID (recommended)
   MEDPLUM_CLIENT_SECRET Client application secret
   MEDPLUM_ACCESS_TOKEN  Existing access token (alternative to client credentials)
-  MEDPLUM_EMAIL         Demo user email (alternative to client credentials)
-  MEDPLUM_PASSWORD      Demo user password
+  MEDPLUM_EMAIL         Project-scoped demo user email (alternative, must have write access)
+  MEDPLUM_PASSWORD      Project-scoped demo user password
 
 Examples:
   MEDPLUM_CLIENT_ID=... MEDPLUM_CLIENT_SECRET=... node scripts/load-location-hierarchy.mjs
-  MEDPLUM_EMAIL=... MEDPLUM_PASSWORD=... node scripts/load-location-hierarchy.mjs
+  MEDPLUM_EMAIL=... MEDPLUM_PASSWORD=... MEDPLUM_PROJECT_ID=${DEFAULT_PROJECT_ID} node scripts/load-location-hierarchy.mjs
 `);
 }
