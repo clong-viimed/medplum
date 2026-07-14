@@ -42,30 +42,85 @@ async function main() {
 
   const medplum = await createMedplumClientFromEnv();
 
-  console.log(`Posting Location hierarchy bundle to ${medplum.getBaseUrl()} ...`);
-  const result = await medplum.executeBatch(bundle);
+  console.log(`Upserting Location hierarchy to ${medplum.getBaseUrl()} ...`);
 
-  const errors = result.entry?.filter((e) => e.response?.status && !e.response.status.startsWith('2')) ?? [];
-  if (errors.length > 0) {
-    console.error(`\n${errors.length} bundle entry(ies) failed:`);
-    for (const error of errors) {
-      console.error(`  - ${error.response?.location || error.response?.status}: ${JSON.stringify(error.response?.outcome)}`);
+  // Map fullUrl (urn:uuid) to server-assigned Location id so partOf references can be resolved.
+  const fullUrlToId = new Map();
+  const created = [];
+  const updated = [];
+  const unchanged = [];
+
+  // First pass: create or update each Location without partOf, building the fullUrl -> id map.
+  for (const entry of bundle.entry ?? []) {
+    const location = entry.resource;
+    const identifier = location.identifier?.[0];
+    if (!identifier) {
+      console.warn(`Skipping Location without identifier: ${location.name}`);
+      continue;
     }
-    throw new Error('Location hierarchy bundle failed to load');
+
+    const searchToken = `identifier=${identifier.system}|${identifier.value}`;
+    const existing = await medplum.searchResources('Location', searchToken);
+
+    let saved;
+    if (existing.length > 0) {
+      const current = existing[0];
+      const needsUpdate = current.name !== location.name ||
+        current.status !== location.status ||
+        current.physicalType?.coding?.[0]?.code !== location.physicalType?.coding?.[0]?.code;
+
+      if (needsUpdate) {
+        saved = await medplum.updateResource({ ...current, ...location, id: current.id, partOf: current.partOf });
+        updated.push({ name: saved.name, id: saved.id });
+      } else {
+        saved = current;
+        unchanged.push({ name: saved.name, id: saved.id });
+      }
+    } else {
+      saved = await medplum.createResource({ ...location, partOf: undefined });
+      created.push({ name: saved.name, id: saved.id });
+    }
+
+    fullUrlToId.set(entry.fullUrl, saved.id);
   }
 
-  const created = result.entry?.filter((e) => e.response?.status === '201') ?? [];
-  const existing = result.entry?.filter((e) => e.response?.status === '200') ?? [];
-  console.log(`\nSuccess: ${created.length} Location resources created, ${existing.length} already existed.`);
-  for (const entry of result.entry ?? []) {
-    const location = entry.resource ?? {};
-    console.log(`  - ${location.name} (${entry.response?.status}): ${entry.response?.location}`);
+  // Second pass: patch partOf references using the fullUrl -> id map.
+  for (const entry of bundle.entry ?? []) {
+    const location = entry.resource;
+    if (!location.partOf?.reference) {
+      continue;
+    }
+
+    const identifier = location.identifier?.[0];
+    if (!identifier) {
+      continue;
+    }
+
+    const parentId = fullUrlToId.get(location.partOf.reference);
+    if (!parentId) {
+      console.warn(`Could not resolve partOf reference ${location.partOf.reference} for ${location.name}`);
+      continue;
+    }
+
+    const searchToken = `identifier=${identifier.system}|${identifier.value}`;
+    const existing = await medplum.searchResources('Location', searchToken);
+    const current = existing[0];
+
+    const expectedPartOf = `Location/${parentId}`;
+    if (current.partOf?.reference !== expectedPartOf) {
+      await medplum.updateResource({ ...current, partOf: { reference: expectedPartOf, display: location.partOf.display } });
+    }
+  }
+
+  console.log(`\nSuccess: ${created.length} created, ${updated.length} updated, ${unchanged.length} unchanged.`);
+  for (const item of [...created, ...updated, ...unchanged]) {
+    console.log(`  - ${item.name}: Location/${item.id}`);
   }
 }
 
 async function createMedplumClientFromEnv() {
   const baseUrl = process.env.MEDPLUM_BASE_URL || DEFAULT_BASE_URL;
-  const projectId = process.env.MEDPLUM_PROJECT_ID || DEFAULT_PROJECT_ID;
+  const projectId = process.env.MEDPLUM_PROJECT_ID ?? DEFAULT_PROJECT_ID;
 
   const medplum = new MedplumClient({
     baseUrl,

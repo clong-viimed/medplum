@@ -34,6 +34,30 @@ Primary source of truth: [/memories/repo/medplum-data-loading.md](/memories/repo
 
 5. **Test practitioner**: Log in as a provider/clinician user who can write encounters.
 
+## Load server-side templates and seed data
+
+Run these once before testing (or whenever the sample data changes):
+
+```bash
+cd /Users/paulwinterling/github/Demos/medplum-ubix
+
+# Location hierarchy — uses super admin credentials
+MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD='medplum_admin' node scripts/load-location-hierarchy.mjs
+
+# Sick Call care template (updates existing template if present)
+MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD='medplum_admin' node scripts/load-sick-call-template.mjs
+
+# SOAP Note care template
+MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD='medplum_admin' node scripts/load-soap-template.mjs
+
+# Occupational exposure follow-up visit template (restores it to its original occupational version)
+MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD='medplum_admin' node scripts/restore-occupational-exposure-follow-up-visit.mjs
+```
+
+> **Important**: The super-admin account (`admin@example.com`) can update existing resources (Location, Sick Call) but may receive `Unauthorized` when creating **new** `PlanDefinition` / `ActivityDefinition` resources if the account is not a member of the Ubix Data project. If you see `Unauthorized`, use a project-scoped admin account or `MEDPLUM_CLIENT_ID` / `MEDPLUM_CLIENT_SECRET` for a ClientApplication with write access.
+>
+> **Note**: `OccupationalExposureFollowUpVisit` is an occupational-health template (exposure incident history, return-to-work status, follow-up plan). The SOAP note flow lives in its own `SOAP Note Visit` PlanDefinition and should never share actions with the occupational template.
+
 ---
 
 ## Test 1 — Auth redirect loop is fixed
@@ -114,7 +138,37 @@ Expected output: `$apply created 1 CarePlan and 6 Tasks with status 'requested'`
 
 ---
 
-## Test 4 — SOAP questionnaires render and save responses
+## Test 4 — SOAP Note care template creates checklist Tasks
+
+**Goal**: Verify the new `SOAP Note Visit` PlanDefinition is separate from `OccupationalExposureFollowUpVisit` and instantiates 4 SOAP Tasks.
+
+1. Sign in to the provider app at `http://127.0.0.1:5172/` as the **provider demo**:
+   - Email: `ubix.provider.alex@example.com`
+   - Password: `Hiive-7jhSWuhQA83-dGrUYkqZrtNE!6`
+2. Create a new encounter:
+   - Patient: your test patient
+   - Care template: select **SOAP Note Visit** (not Sick Call or Occupational Exposure Follow-up Visit)
+3. Save the encounter.
+4. Open the **Tasks** panel on the chart.
+
+**Expected**: Four checklist Tasks appear:
+- Document subjective section
+- Document objective section
+- Document assessment section
+- Document plan section
+
+Each Task has status `requested`. No occupational exposure or return-to-work tasks should appear.
+
+**Backend verification**:
+```bash
+cd /Users/paulwinterling/github/Demos/medplum-ubix
+TEST_PATIENT_ID=<patient-id> MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD='medplum_admin' MEDPLUM_PROJECT_ID= node scripts/verify-soap-template.mjs
+```
+Expected output: `Found PlanDefinition/{id} with 4 action(s)` and `$apply created 4 Task(s)`.
+
+---
+
+## Test 5 — SOAP questionnaires render and save responses
 
 **Goal**: Each SOAP section card accepts input and persists a `QuestionnaireResponse`.
 
@@ -145,11 +199,11 @@ Expected: 5 SOAP `Questionnaire` resources exist on the server.
 
 ---
 
-## Test 5 — Extraction creates clinical resources
+## Test 6 — Extraction creates clinical resources
 
 **Goal**: After saving SOAP responses, `Observation`, `Condition`, and `CarePlan` resources are created.
 
-1. Complete Test 4 with realistic data.
+1. Complete Test 5 with realistic data.
 2. Open browser DevTools → Network tab.
 3. Watch for POST/PUT calls to `Observation`, `Condition`, `CarePlan`.
 
@@ -167,7 +221,7 @@ Expected output similar to: `7 Observations, 2 Conditions, 1 CarePlan created`.
 
 ---
 
-## Test 6 — Vitals in Objective card
+## Test 7 — Vitals in Objective card
 
 **Goal**: Vitals captured in the Objective `Questionnaire` are extracted as LOINC-coded `Observation`s.
 
@@ -194,7 +248,7 @@ Expected output similar to: `7 Observations, 2 Conditions, 1 CarePlan created`.
 
 ---
 
-## Test 7 — Orders panel
+## Test 8 — Orders panel
 
 **Goal**: Add individual orders and order sets, then view them in the Orders panel.
 
@@ -212,7 +266,7 @@ Expected output similar to: `7 Observations, 2 Conditions, 1 CarePlan created`.
 
 ---
 
-## Test 8 — Disposition updates Encounter
+## Test 9 — Disposition updates Encounter
 
 **Goal**: Selecting a disposition in the Plan card updates `Encounter.hospitalization.dischargeDisposition`.
 
@@ -232,7 +286,7 @@ Look for `dischargeDisposition.coding` and extension `https://hiivehealth.com/fh
 
 ---
 
-## Test 9 — Clinical decision flows
+## Test 10 — Clinical decision flows
 
 **Goal**: Select and complete a decision-flow questionnaire.
 
@@ -245,11 +299,11 @@ Look for `dischargeDisposition.coding` and extension `https://hiivehealth.com/fh
 
 ---
 
-## Test 10 — Sign & Close creates Provenance, ClinicalImpression, and Composition
+## Test 11 — Sign & Close creates Provenance, ClinicalImpression, and Composition
 
 **Goal**: The full close-of-encounter workflow produces a signed clinical document.
 
-1. Complete Tests 4–9 so the encounter has data in every section.
+1. Complete Tests 5–10 so the encounter has data in every section.
 2. Complete all checklist Tasks in the Task panel (or leave some incomplete for the lock test).
 3. Click **Sign** (do not lock).
 
@@ -275,19 +329,19 @@ Expected output: confirms `Provenance`, completed `ClinicalImpression`, and `Com
 
 ---
 
-## Test 11 — Synthetic patient integration (optional)
+## Test 12 — Synthetic patient integration (optional)
 
 **Goal**: Confirm the encounter flow works against synthetic patients from `hiivecare-dev-data-pipeline`.
 
 1. Follow the pipeline instructions in `hiivecare-dev-data-pipeline/docs/data-synthesis-requirements.md` to generate/load patients.
 2. Open one synthetic patient in the provider app.
-3. Create a Sick Call encounter and run Tests 2–10.
+3. Create a Sick Call or SOAP Note Visit encounter and run Tests 2–11.
 
 **Expected**: Same behavior as a manually created patient.
 
 ---
 
-## Test 12 — Patient app read-only view (optional)
+## Test 13 — Patient app read-only view (optional)
 
 **Goal**: Ensure the patient app does not break and can view encounter data.
 
@@ -308,6 +362,8 @@ Use this shorter list for routine regression checks:
 - [ ] Patient app loads on `5173`
 - [ ] Location selector cascades building → floor → room → station
 - [ ] Sick Call encounter creates 6 checklist Tasks
+- [ ] SOAP Note Visit encounter creates 4 checklist Tasks (and no occupational tasks)
+- [ ] OccupationalExposureFollowUpVisit encounter shows only occupational tasks
 - [ ] Subjective, ROS, Objective, Assessment, Plan cards save and reload
 - [ ] Vitals extract to LOINC-coded Observations
 - [ ] Assessment diagnoses extract to Conditions
@@ -326,7 +382,8 @@ Use this shorter list for routine regression checks:
 | `Search engine null is not supported` | Same as above; stale localStorage is the cause |
 | 403 from backend scripts | Run `aws sso login --profile hiive-build` |
 | Location dropdown empty | Verify seed data loaded: `node scripts/verify-location-hierarchy.mjs` |
-| Tasks not appearing | Verify Sick Call template: `node scripts/verify-sick-call-template.mjs` |
+| Tasks not appearing | Verify the correct template: `node scripts/verify-sick-call-template.mjs` or `node scripts/verify-soap-template.mjs` |
+| Occupational template shows SOAP tasks | Restore the occupational template: `node scripts/restore-occupational-exposure-follow-up-visit.mjs` |
 | Composition not created | Check DevTools Network for `persistAll` errors; ensure all questionnaire responses save first |
 
 ---
@@ -336,6 +393,13 @@ Use this shorter list for routine regression checks:
 - [medplum-provider/src/components/encounter/EncounterChart.tsx](../medplum-provider/src/components/encounter/EncounterChart.tsx)
 - [medplum-provider/src/hooks/useSoapQuestionnaires.ts](../medplum-provider/src/hooks/useSoapQuestionnaires.ts)
 - [medplum-provider/src/utils/soap-composition.ts](../medplum-provider/src/utils/soap-composition.ts)
+- [medplum-provider/src/data/soap-template/soap-note-plan-definition.json](../medplum-provider/src/data/soap-template/soap-note-plan-definition.json)
+- [medplum-provider/src/data/soap-template/soap-checklist-tasks.json](../medplum-provider/src/data/soap-template/soap-checklist-tasks.json)
+- [medplum-provider/src/data/sample-location-hierarchy-bundle.json](../medplum-provider/src/data/sample-location-hierarchy-bundle.json)
+- [medplum-ubix/scripts/load-soap-template.mjs](../medplum-ubix/scripts/load-soap-template.mjs)
+- [medplum-ubix/scripts/verify-soap-template.mjs](../medplum-ubix/scripts/verify-soap-template.mjs)
+- [medplum-ubix/scripts/load-location-hierarchy.mjs](../medplum-ubix/scripts/load-location-hierarchy.mjs)
+- [medplum-ubix/scripts/curate-occhealth-demo.mjs](../medplum-ubix/scripts/curate-occhealth-demo.mjs)
 - [medplum-ubix/scripts/verify-location-hierarchy.mjs](../medplum-ubix/scripts/verify-location-hierarchy.mjs)
 - [medplum-ubix/scripts/verify-sick-call-template.mjs](../medplum-ubix/scripts/verify-sick-call-template.mjs)
 - [medplum-ubix/scripts/verify-soap-questionnaires.mjs](../medplum-ubix/scripts/verify-soap-questionnaires.mjs)
