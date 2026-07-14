@@ -56,6 +56,7 @@ async function main() {
       continue;
     }
 
+    // Always load using a fresh search so we update the resource in the authenticated project
     const existing = await medplum.searchOne('Questionnaire', { url: questionnaire.url });
     if (existing) {
       const updated = await medplum.updateResource({ ...questionnaire, id: existing.id });
@@ -67,6 +68,7 @@ async function main() {
   }
 
   console.log('\nSOAP Questionnaires loaded successfully.');
+  console.warn('\nIMPORTANT: Run this script with the target project\'s ClientApplication credentials (e.g. ubix-data) so resources are created in the provider project. Admin user credentials create resources in the admin project, which provider users cannot see.');
 }
 
 function getReferenceString(resource) {
