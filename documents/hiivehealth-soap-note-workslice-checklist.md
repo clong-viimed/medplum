@@ -21,6 +21,7 @@ Last updated: 2026-07-14
 - [x] **2.2** Define checklist items as `ActivityDefinition` (`kind: "Task"`)
 - [x] **2.3** Confirm `PlanDefinition/$apply` creates `Task`s and renders in `TaskPanel`
 - [x] **2.4** Confirm checklist is advisory and does not block signing
+- [/] **2.5** Update provider `AccessPolicy` so all care templates are visible to the provider demo user (script ready; requires project-scoped admin token)
 
 ## Phase 3 — SOAP section questionnaires
 
