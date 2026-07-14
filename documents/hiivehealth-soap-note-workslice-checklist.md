@@ -24,10 +24,10 @@ Last updated: 2026-07-14
 
 ## Phase 3 — SOAP section questionnaires
 
-- [ ] **3.1** Create separate `Questionnaire`s for Subjective, Objective, Assessment, Plan
-- [ ] **3.2** Add Review of Systems `Questionnaire` with grouped systems
-- [ ] **3.3** Render each `Questionnaire` inside a Mantine card in `EncounterChart`
-- [ ] **3.4** Save each `QuestionnaireResponse` and link to `Encounter`
+- [x] **3.1** Create separate `Questionnaire`s for Subjective, Objective, Assessment, Plan
+- [x] **3.2** Add Review of Systems `Questionnaire` with grouped systems
+- [x] **3.3** Render each `Questionnaire` inside a Mantine card in `EncounterChart`
+- [x] **3.4** Save each `QuestionnaireResponse` and link to `Encounter`
 
 ## Phase 4 — Extraction and clinical resources
 
