@@ -2,6 +2,18 @@
 
 Last updated: 2026-07-14
 
+## Required users and credentials
+
+Primary source of truth: [/memories/repo/medplum-data-loading.md](/memories/repo/medplum-data-loading.md)
+
+| Role | App / URL | Email | Password | Use |
+|------|-----------|-------|----------|-----|
+| Super admin | Medplum Admin app: `https://app.ehr.hiivehealth.net/` | `admin@example.com` | `medplum_admin` | Load/administer Location hierarchy and server-side resources |
+| Provider demo | Provider app: `http://127.0.0.1:5172/` | `ubix.provider.alex@example.com` | `Hiive-7jhSWuhQA83-dGrUYkqZrtNE!6` | Run encounter chart tests, sign notes, place orders |
+| Patient demo | Patient app: `http://127.0.0.1:5173/` | *(use the test patient's login)* | — | Optional patient read-only view |
+
+**Important**: For super-admin login, leave `MEDPLUM_PROJECT_ID` empty/unset. Forcing a project ID causes a "User not found" error because the super admin is not scoped to the Ubix Data project.
+
 ## Prerequisites
 
 1. **AWS SSO session is active** (required for backend connectivity):
@@ -29,7 +41,9 @@ Last updated: 2026-07-14
 **Goal**: Verify logging out and back in no longer loops between `/logout` and `/signin`.
 
 1. Open the Medplum app at `http://127.0.0.1:3001/` in an incognito window.
-2. Sign in with valid credentials.
+2. Sign in as the **super admin**:
+   - Email: `admin@example.com`
+   - Password: `medplum_admin`
 3. Confirm the home page loads (search page) without redirecting to `/logout`.
 4. Click the user menu and choose **Sign out**.
 5. Confirm you land on `/signin` and **not** `/logout`.
@@ -43,16 +57,19 @@ Last updated: 2026-07-14
 
 **Goal**: Verify building → floor → room → station selectors work and save to the encounter.
 
-1. In the provider app, navigate to an existing encounter or create one via **Encounters → New Encounter**.
-2. In the **Room and Station** card, open the **Building** dropdown.
-3. Select **HiiveCare Main Campus**.
-4. Open the **Floor** dropdown — expect floors such as `Floor 1`, `Floor 2`.
-5. Select **Floor 1**.
-6. Open the **Room** dropdown — expect rooms such as `Room 101`, `Room 102`.
-7. Select **Room 101**.
-8. Open the **Station** dropdown — expect stations such as `Bed A`, `Bed B`.
-9. Select **Bed A**.
-10. Save/refresh the page.
+1. Sign in to the provider app at `http://127.0.0.1:5172/` as the **provider demo**:
+   - Email: `ubix.provider.alex@example.com`
+   - Password: `Hiive-7jhSWuhQA83-dGrUYkqZrtNE!6`
+2. Navigate to an existing encounter or create one via **Encounters → New Encounter**.
+3. In the **Room and Station** card, open the **Building** dropdown.
+4. Select **HiiveCare Main Campus**.
+5. Open the **Floor** dropdown — expect floors such as `Floor 1`, `Floor 2`.
+6. Select **Floor 1**.
+7. Open the **Room** dropdown — expect rooms such as `Room 101`, `Room 102`.
+8. Select **Room 101**.
+9. Open the **Station** dropdown — expect stations such as `Bed A`, `Bed B`.
+10. Select **Bed A**.
+11. Save/refresh the page.
 
 **Expected**: After refresh, the encounter's `location` references `Location/Bed A` (or equivalent). The selectors rehydrate to the previously selected values.
 
@@ -69,11 +86,14 @@ node scripts/verify-location-hierarchy.mjs
 
 **Goal**: Verify a Sick Call encounter applies the PlanDefinition and instantiates 6 Tasks.
 
-1. In the provider app, create a new encounter:
+1. Sign in to the provider app at `http://127.0.0.1:5172/` as the **provider demo**:
+   - Email: `ubix.provider.alex@example.com`
+   - Password: `Hiive-7jhSWuhQA83-dGrUYkqZrtNE!6`
+2. Create a new encounter:
    - Patient: your test patient
    - Type/Class: select **Sick Call** (or any visit type mapped to the Sick Call `PlanDefinition`)
-2. Save the encounter.
-3. Open the **Tasks** panel on the chart.
+3. Save the encounter.
+4. Open the **Tasks** panel on the chart.
 
 **Expected**: Six checklist Tasks appear, e.g.:
 - Review chief complaint
@@ -272,7 +292,7 @@ Expected output: confirms `Provenance`, completed `ClinicalImpression`, and `Com
 **Goal**: Ensure the patient app does not break and can view encounter data.
 
 1. Open the patient app at `http://127.0.0.1:5173/`.
-2. Sign in as the test patient.
+2. Sign in as the **test patient** (use the patient's own Medplum credentials).
 3. Navigate to the encounter/visit summary.
 
 **Expected**: Encounter details load without errors. SOAP note content may be shown as a simplified summary depending on patient-app scope.
