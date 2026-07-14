@@ -1,7 +1,24 @@
 #!/usr/bin/env node
-import { MedplumClient, normalizeErrorString } from '@medplum/core';
+// Polyfill sessionStorage for MedplumClient when running in Node.js
+import { ClientStorage, MedplumClient, MemoryStorage, normalizeErrorString } from '@medplum/core';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { TextDecoder, TextEncoder } from 'node:util';
+
+const memoryStore = new MemoryStorage();
+globalThis.sessionStorage = memoryStore;
+globalThis.localStorage = memoryStore;
+globalThis.TextDecoder = TextDecoder;
+globalThis.TextEncoder = TextEncoder;
+globalThis.location = { protocol: 'https:', hostname: 'api.ehr.hiivehealth.net', href: 'https://api.ehr.hiivehealth.net/' };
+globalThis.window = {
+  crypto: globalThis.crypto,
+  btoa: (str) => Buffer.from(str, 'binary').toString('base64'),
+  atob: (str) => Buffer.from(str, 'base64').toString('binary'),
+  TextDecoder,
+  TextEncoder,
+  location: globalThis.location,
+};
 
 const DEFAULT_BASE_URL = 'https://api.ehr.hiivehealth.net/';
 const DEFAULT_PROJECT_ID = '7e472dfd-3ab9-4b75-adac-38e0c5c5d6c8';
@@ -48,10 +65,12 @@ async function main() {
 
 async function createMedplumClientFromEnv() {
   const baseUrl = process.env.MEDPLUM_BASE_URL || DEFAULT_BASE_URL;
+  const projectId = process.env.MEDPLUM_PROJECT_ID || DEFAULT_PROJECT_ID;
 
   const medplum = new MedplumClient({
     baseUrl,
     clientId: process.env.MEDPLUM_CLIENT_ID,
+    storage: new ClientStorage(new MemoryStorage()),
   });
 
   if (process.env.MEDPLUM_ACCESS_TOKEN) {
@@ -64,9 +83,24 @@ async function createMedplumClientFromEnv() {
     return medplum;
   }
 
+  if (process.env.MEDPLUM_EMAIL && process.env.MEDPLUM_PASSWORD) {
+    const loginResult = await medplum.startLogin(
+      {
+        email: process.env.MEDPLUM_EMAIL,
+        password: process.env.MEDPLUM_PASSWORD,
+        projectId,
+      },
+      { remember: false }
+    );
+    if (loginResult.code) {
+      await medplum.processCode(loginResult.code);
+    }
+    return medplum;
+  }
+
   throw new Error(
-    'Set MEDPLUM_ACCESS_TOKEN or MEDPLUM_CLIENT_ID/MEDPLUM_CLIENT_SECRET before running.\n' +
-      'Example: MEDPLUM_CLIENT_ID=... MEDPLUM_CLIENT_SECRET=... node scripts/load-location-hierarchy.mjs'
+    'Set MEDPLUM_ACCESS_TOKEN, MEDPLUM_CLIENT_ID/MEDPLUM_CLIENT_SECRET, or MEDPLUM_EMAIL/MEDPLUM_PASSWORD before running.\n' +
+      'Example: MEDPLUM_EMAIL=... MEDPLUM_PASSWORD=... node scripts/load-location-hierarchy.mjs'
   );
 }
 
@@ -95,8 +129,11 @@ Environment variables:
   MEDPLUM_CLIENT_ID     Client application ID
   MEDPLUM_CLIENT_SECRET Client application secret
   MEDPLUM_ACCESS_TOKEN  Existing access token (alternative to client credentials)
+  MEDPLUM_EMAIL         Demo user email (alternative to client credentials)
+  MEDPLUM_PASSWORD      Demo user password
 
-Example:
+Examples:
   MEDPLUM_CLIENT_ID=... MEDPLUM_CLIENT_SECRET=... node scripts/load-location-hierarchy.mjs
+  MEDPLUM_EMAIL=... MEDPLUM_PASSWORD=... node scripts/load-location-hierarchy.mjs
 `);
 }
