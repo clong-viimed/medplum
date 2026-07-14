@@ -48,6 +48,8 @@ async function main() {
 
   if (process.env.MEDPLUM_ACCESS_TOKEN) {
     medplum.setAccessToken(process.env.MEDPLUM_ACCESS_TOKEN);
+  } else if (process.env.MEDPLUM_CLIENT_ID && process.env.MEDPLUM_CLIENT_SECRET) {
+    await medplum.startClientLogin(process.env.MEDPLUM_CLIENT_ID, process.env.MEDPLUM_CLIENT_SECRET);
   } else if (process.env.MEDPLUM_EMAIL && process.env.MEDPLUM_PASSWORD) {
     await medplum.startLogin(
       {
@@ -58,7 +60,7 @@ async function main() {
       { remember: false }
     );
   } else {
-    throw new Error('Set MEDPLUM_ACCESS_TOKEN or MEDPLUM_EMAIL/MEDPLUM_PASSWORD');
+    throw new Error('Set MEDPLUM_ACCESS_TOKEN, MEDPLUM_CLIENT_ID/MEDPLUM_CLIENT_SECRET, or MEDPLUM_EMAIL/MEDPLUM_PASSWORD');
   }
 
   console.log('Searching for care templates with provider credentials ...\n');

@@ -36,29 +36,40 @@ Primary source of truth: [/memories/repo/medplum-data-loading.md](/memories/repo
 
 ## Load server-side templates and seed data
 
+Most resources live in the **Ubix Data** Medplum project and must be loaded with the `ubix-data` `ClientApplication` credentials. Retrieve the current client secret from [ubix-data-admin-secret-retrieval.md](../ubix-data-admin-secret-retrieval.md) (Client ID: `69a636e6-b110-4de7-ac73-4c2b642b48a2`).
+
 Run these once before testing (or whenever the sample data changes):
 
 ```bash
 cd /Users/paulwinterling/github/Demos/medplum-ubix
 
-# Location hierarchy — uses super admin credentials
-MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD='medplum_admin' node scripts/load-location-hierarchy.mjs
+# Set once for the commands below
+export MEDPLUM_CLIENT_ID='69a636e6-b110-4de7-ac73-4c2b642b48a2'
+export MEDPLUM_CLIENT_SECRET='<paste-secret-from-ubix-data-admin-secret-retrieval.md>'
 
-# Sick Call care template (updates existing template if present)
-MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD='medplum_admin' node scripts/load-sick-call-template.mjs
+# Location hierarchy
+node scripts/load-location-hierarchy.mjs
+
+# Sick Call care template
+node scripts/load-sick-call-template.mjs
 
 # SOAP Note care template
-MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD='medplum_admin' node scripts/load-soap-template.mjs
+node scripts/load-soap-template.mjs
 
-# Occupational exposure follow-up visit template (restores it to its original occupational version)
-MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD='medplum_admin' node scripts/restore-occupational-exposure-follow-up-visit.mjs
+# SOAP section questionnaires (Subjective, Objective, Assessment, Plan, ROS)
+node scripts/load-soap-questionnaires.mjs
 
-# Provider access policy — makes all three care templates visible to the provider demo user.
-# This step requires a project-scoped admin token because the super admin is not in the Ubix Data project.
-MEDPLUM_ACCESS_TOKEN=<project-admin-token> node scripts/update-provider-care-template-policy.mjs
+# Clinical decision flow questionnaires (Chest Pain, Respiratory)
+node scripts/load-decision-flows.mjs
+
+# Provider access policy — makes all three care templates visible to the provider demo user
+node scripts/update-provider-care-template-policy.mjs
+
+# Optional: restore occupational exposure follow-up visit to its original actions
+node scripts/restore-occupational-exposure-follow-up-visit.mjs
 ```
 
-> **Important**: The super-admin account (`admin@example.com`) can update existing resources (Location, Sick Call) but receives `Unauthorized` for project-scoped resources like `AccessPolicy` and when creating **new** `PlanDefinition` / `ActivityDefinition` resources. For those steps you must use a project-scoped admin account (`MEDPLUM_ACCESS_TOKEN` or `MEDPLUM_CLIENT_ID` / `MEDPLUM_CLIENT_SECRET`).
+> **Important**: The super-admin account (`admin@example.com`) is only for server administration. It is **not** a member of the Ubix Data project, so it gets `Unauthorized` when creating project-scoped resources like `PlanDefinition`, `ActivityDefinition`, `AccessPolicy`, or `Questionnaire`. Always use the `ubix-data` `ClientApplication` credentials for the commands above.
 >
 > **Note**: `OccupationalExposureFollowUpVisit` is an occupational-health template (exposure incident history, return-to-work status, follow-up plan). The SOAP note flow lives in its own `SOAP Note Visit` PlanDefinition and should never share actions with the occupational template.
 
@@ -387,7 +398,7 @@ Use this shorter list for routine regression checks:
 | 403 from backend scripts | Run `aws sso login --profile hiive-build` |
 | Location dropdown empty | Verify seed data loaded: `node scripts/verify-location-hierarchy.mjs` |
 | Tasks not appearing | Verify the correct template: `node scripts/verify-sick-call-template.mjs` or `node scripts/verify-soap-template.mjs` |
-| Only one care template visible to provider | Run `node scripts/update-provider-care-template-policy.mjs` with a project-scoped admin token, or manually update `AccessPolicy/05fa99c3-6400-4d8c-af38-8b00b890315d` to include all three PlanDefinition URLs. |
+| Only one care template visible to provider | Run `node scripts/update-provider-care-template-policy.mjs` with the `ubix-data` ClientApplication credentials (see loading section above). |
 | Occupational/Sick Call encounter shows SOAP cards | The chart now gates SOAP cards on the `SOAP Note Visit` care template. Verify `Encounter.extension` has the care-template URL. |
 | Composition not created | Check DevTools Network for `persistAll` errors; ensure all questionnaire responses save first |
 

@@ -155,7 +155,7 @@ async function createMedplumClientFromEnv() {
 
   throw new Error(
     'Set MEDPLUM_ACCESS_TOKEN, MEDPLUM_CLIENT_ID/MEDPLUM_CLIENT_SECRET, or MEDPLUM_EMAIL/MEDPLUM_PASSWORD before running.\n' +
-      'Example: MEDPLUM_EMAIL=... MEDPLUM_PASSWORD=... node scripts/load-location-hierarchy.mjs'
+      'Example: MEDPLUM_CLIENT_ID=... MEDPLUM_CLIENT_SECRET=... node scripts/load-location-hierarchy.mjs'
   );
 }
 

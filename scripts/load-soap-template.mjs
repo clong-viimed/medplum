@@ -102,8 +102,13 @@ async function createMedplumClientFromEnv() {
     return medplum;
   }
 
+  if (process.env.MEDPLUM_CLIENT_ID && process.env.MEDPLUM_CLIENT_SECRET) {
+    await medplum.startClientLogin(process.env.MEDPLUM_CLIENT_ID, process.env.MEDPLUM_CLIENT_SECRET);
+    return medplum;
+  }
+
   if (!process.env.MEDPLUM_EMAIL || !process.env.MEDPLUM_PASSWORD) {
-    throw new Error('Set MEDPLUM_EMAIL and MEDPLUM_PASSWORD, or MEDPLUM_ACCESS_TOKEN');
+    throw new Error('Set MEDPLUM_EMAIL and MEDPLUM_PASSWORD, MEDPLUM_CLIENT_ID/MEDPLUM_CLIENT_SECRET, or MEDPLUM_ACCESS_TOKEN');
   }
 
   await medplum.startLogin(
