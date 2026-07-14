@@ -88,7 +88,7 @@ async function createMedplumClientFromEnv() {
       {
         email: process.env.MEDPLUM_EMAIL,
         password: process.env.MEDPLUM_PASSWORD,
-        projectId,
+        ...(process.env.MEDPLUM_PROJECT_ID ? { projectId } : {}),
       },
       { remember: false }
     );

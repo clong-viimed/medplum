@@ -13,7 +13,7 @@ Last updated: 2026-07-14
 
 - [x] **1.1** Create sample `Location` hierarchy bundle (building → floor → room → station/bed)
 - [x] **1.2** Add cascading Location selectors to `EncounterChart` and save selected station to `Encounter.location`
-- [/] **1.3** Load sample `Location` data and verify the chart loads/saves location correctly
+- [x] **1.3** Load sample `Location` data and verify the chart loads/saves location correctly
 
 ## Phase 2 — Visit type and checklist
 
