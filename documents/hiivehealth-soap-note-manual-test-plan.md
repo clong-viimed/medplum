@@ -198,7 +198,7 @@ Expected output: `Found PlanDefinition/{id} with 4 action(s)` and `$apply create
    - Subjective: chief complaint, HPI
    - ROS: check at least one system (e.g., Respiratory — "Shortness of breath")
    - Objective: enter vitals (temperature, heart rate, blood pressure, etc.)
-   - Assessment: add one or more diagnoses
+   - Assessment: add one or more diagnoses (free-text entries)
    - Plan: add orders, disposition, follow-up
 4. Blur/click outside each card to trigger auto-save.
 5. Refresh the page.
@@ -398,6 +398,8 @@ Use this shorter list for routine regression checks:
 | 403 from backend scripts | Run `aws sso login --profile hiive-build` |
 | Location dropdown empty | Verify seed data loaded: `node scripts/verify-location-hierarchy.mjs` |
 | Tasks not appearing | Verify the correct template: `node scripts/verify-sick-call-template.mjs` or `node scripts/verify-soap-template.mjs` |
+| SOAP card shows "No Answers Defined" | Clear browser `localStorage`/`sessionStorage` and hard-refresh; the provider app caches `Questionnaire` definitions |
+| Diagnoses field shows "No Answers Defined" | Same as above; diagnoses are free-text entries, so the field should render as text inputs after clearing cache |
 | Only one care template visible to provider | Run `node scripts/update-provider-care-template-policy.mjs` with the `ubix-data` ClientApplication credentials (see loading section above). |
 | Occupational/Sick Call encounter shows SOAP cards | The chart now gates SOAP cards on the `SOAP Note Visit` care template. Verify `Encounter.extension` has the care-template URL. |
 | Composition not created | Check DevTools Network for `persistAll` errors; ensure all questionnaire responses save first |

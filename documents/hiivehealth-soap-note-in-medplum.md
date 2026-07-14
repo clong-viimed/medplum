@@ -214,13 +214,13 @@ Each SOAP section gets its own `Questionnaire`. This makes extraction mapping sm
   "item": [
     {
       "linkId": "diagnoses",
-      "type": "open-choice",
+      "type": "string",
       "text": "Diagnoses",
       "repeats": true
     },
     {
       "linkId": "differential-diagnoses",
-      "type": "open-choice",
+      "type": "string",
       "text": "Differential Diagnoses",
       "repeats": true
     },
