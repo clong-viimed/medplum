@@ -17,9 +17,9 @@ Last updated: 2026-07-14
 
 ## Phase 2 — Visit type and checklist
 
-- [ ] **2.1** Define one Hiive visit type (e.g., Sick Call) as a `PlanDefinition`
-- [ ] **2.2** Define checklist items as `ActivityDefinition` (`kind: "Task"`)
-- [ ] **2.3** Confirm `PlanDefinition/$apply` creates `Task`s and renders in `TaskPanel`
+- [x] **2.1** Define one Hiive visit type (e.g., Sick Call) as a `PlanDefinition`
+- [x] **2.2** Define checklist items as `ActivityDefinition` (`kind: "Task"`)
+- [/] **2.3** Confirm `PlanDefinition/$apply` creates `Task`s and renders in `TaskPanel`
 - [ ] **2.4** Confirm checklist is advisory and does not block signing
 
 ## Phase 3 — SOAP section questionnaires
