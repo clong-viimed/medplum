@@ -150,6 +150,12 @@ const REQUIRED_PROVIDER_RESOURCE_INTERACTIONS = {
   Slot: ['read', 'search', 'create', 'update', 'history', 'vread'],
   Task: ['read', 'search', 'create', 'update', 'history', 'vread'],
 };
+
+const PROVIDER_CARE_TEMPLATE_URLS = [
+  'https://hiivecare.example/fhir/PlanDefinition/occupational-exposure-follow-up-visit',
+  'https://hiivehealth.com/plandefinition/sick-call',
+  'https://hiivehealth.com/plandefinition/soap-note',
+];
 const INCIDENT_QUESTIONNAIRE_LINK_IDS = [
   'incidentType',
   'component',
@@ -787,6 +793,12 @@ function ensureProviderAccessPolicy(accessPolicy) {
       interactions.add(interaction);
     }
     resourceRule.interaction = Array.from(interactions);
+  }
+
+  // Ensure provider can see all Hiive care templates in the encounter creation dropdown.
+  const planDefinitionRule = updated.resource.find((candidate) => candidate.resourceType === 'PlanDefinition');
+  if (planDefinitionRule) {
+    planDefinitionRule.criteria = `PlanDefinition?url=${PROVIDER_CARE_TEMPLATE_URLS.join(',')}`;
   }
 
   return updated;

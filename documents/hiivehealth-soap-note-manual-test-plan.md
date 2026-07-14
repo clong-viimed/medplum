@@ -52,9 +52,13 @@ MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD='medplum_admin' node scripts/lo
 
 # Occupational exposure follow-up visit template (restores it to its original occupational version)
 MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD='medplum_admin' node scripts/restore-occupational-exposure-follow-up-visit.mjs
+
+# Provider access policy — makes all three care templates visible to the provider demo user.
+# This step requires a project-scoped admin token because the super admin is not in the Ubix Data project.
+MEDPLUM_ACCESS_TOKEN=<project-admin-token> node scripts/update-provider-care-template-policy.mjs
 ```
 
-> **Important**: The super-admin account (`admin@example.com`) can update existing resources (Location, Sick Call) but may receive `Unauthorized` when creating **new** `PlanDefinition` / `ActivityDefinition` resources if the account is not a member of the Ubix Data project. If you see `Unauthorized`, use a project-scoped admin account or `MEDPLUM_CLIENT_ID` / `MEDPLUM_CLIENT_SECRET` for a ClientApplication with write access.
+> **Important**: The super-admin account (`admin@example.com`) can update existing resources (Location, Sick Call) but receives `Unauthorized` for project-scoped resources like `AccessPolicy` and when creating **new** `PlanDefinition` / `ActivityDefinition` resources. For those steps you must use a project-scoped admin account (`MEDPLUM_ACCESS_TOKEN` or `MEDPLUM_CLIENT_ID` / `MEDPLUM_CLIENT_SECRET`).
 >
 > **Note**: `OccupationalExposureFollowUpVisit` is an occupational-health template (exposure incident history, return-to-work status, follow-up plan). The SOAP note flow lives in its own `SOAP Note Visit` PlanDefinition and should never share actions with the occupational template.
 
@@ -383,6 +387,7 @@ Use this shorter list for routine regression checks:
 | 403 from backend scripts | Run `aws sso login --profile hiive-build` |
 | Location dropdown empty | Verify seed data loaded: `node scripts/verify-location-hierarchy.mjs` |
 | Tasks not appearing | Verify the correct template: `node scripts/verify-sick-call-template.mjs` or `node scripts/verify-soap-template.mjs` |
+| Only one care template visible to provider | Run `node scripts/update-provider-care-template-policy.mjs` with a project-scoped admin token, or manually update `AccessPolicy/05fa99c3-6400-4d8c-af38-8b00b890315d` to include all three PlanDefinition URLs. |
 | Occupational/Sick Call encounter shows SOAP cards | The chart now gates SOAP cards on the `SOAP Note Visit` care template. Verify `Encounter.extension` has the care-template URL. |
 | Composition not created | Check DevTools Network for `persistAll` errors; ensure all questionnaire responses save first |
 
