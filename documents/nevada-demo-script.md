@@ -9,14 +9,16 @@
 
 ## Setup & Roles
 
-| Persona | Portal | Username | Notes |
-|---|---|---|---|
-| Dr. Alex | medplum-provider | `nevada.provider.alex@example.com` | Full provider access |
-| Sarah | medplum-provider | `nevada.payer.sarah@example.com` | Limited to Silver State roster |
-| Admin | medplum-ubix | project admin account | User provisioning, audit, C-CDA import |
-| Jordan Riley | (patient) | seeded patient | Opt-in patient |
-| Taylor Smith | (patient) | seeded patient | Not-declared patient |
-| Medicaid Member | (patient) | seeded patient | Opt-out, Medicaid override |
+| Persona | Portal | Username | Password | Notes |
+|---|---|---|---|---|
+| Dr. Alex | medplum-provider | `nevada.provider.alex@example.com` | `Nevada-5637c857-Demo!` | Full provider access |
+| Dr. Jordan | medplum-provider | `nevada.provider.jordan@example.com` | `Nevada-51659e51-Demo!` | Full provider access |
+| Sarah | medplum-provider | `nevada.payer.sarah@example.com` | `Nevada-410d4b60-Demo!` | Limited to Silver State roster |
+| Miguel | medplum-provider | `nevada.payer.miguel@example.com` | `Nevada-36a6ee96-Demo!` | Limited to High Desert roster |
+| Admin | medplum-ubix | `admin@example.com` | `medplum_admin` | User provisioning, audit, C-CDA import |
+| Jordan Riley | (patient) | seeded patient | — | Opt-in patient |
+| Taylor Smith | (patient) | seeded patient | — | Not-declared patient |
+| Medicaid Member | (patient) | seeded patient | — | Opt-out, Medicaid override |
 
 ---
 
@@ -25,7 +27,7 @@
 **Narrative**: Providers sign in with native Medplum credentials. In production this would be Okta/SAML SSO with MFA; today we show native login and note the integration path.
 
 1. Open **medplum-provider** at `http://127.0.0.1:5172/`.
-2. Log in as **Dr. Alex** (`nevada.provider.alex@example.com`).
+2. Log in as **Dr. Alex** (`nevada.provider.alex@example.com` / `Nevada-5637c857-Demo!`).
 3. From the landing page, click **Patients** in the left menu.
 4. Search for `Jordan Riley` by name/DOB or MRN.
 5. Point out the patient header:
@@ -81,7 +83,7 @@
 
 ## Act 3: Roster-Based Access (5 min)
 
-1. Log out, then log in as **Sarah** (`nevada.payer.sarah@example.com`).
+1. Log out, then log in as **Sarah** (`nevada.payer.sarah@example.com` / `Nevada-410d4b60-Demo!`).
 2. Sarah lands on the **Roster** dashboard showing last-30-day encounters for her roster Group only.
 3. Filter by visit type (Ambulatory, Emergency, Inpatient, Home health).
 4. Sort by patient name and encounter date.
@@ -97,7 +99,7 @@
 
 ## Act 4: CDR Ingest & Document View (6 min)
 
-1. Switch to **medplum-ubix** and log in with a project admin account.
+1. Switch to **medplum-ubix** and log in with the project admin account (`admin@example.com` / `medplum_admin`).
 2. Navigate to **Project admin → Nevada C-CDA**.
 3. Click **Import C-CDA** and upload `packages/examples/src/nevada-ccda/sample-ccda.xml`.
 4. Optionally specify a target patient; otherwise a new patient is created.
