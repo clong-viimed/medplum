@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
-import { Anchor, Button, Title } from '@mantine/core';
+import { Anchor, Button, Group, Title } from '@mantine/core';
 import { MedplumLink } from '@medplum/react';
-import { IconUserPlus } from '@tabler/icons-react';
+import { IconUpload, IconUserPlus } from '@tabler/icons-react';
 import type { JSX } from 'react';
 import { MemberTable } from './MembersTable';
 
@@ -21,15 +21,26 @@ export function UsersPage(): JSX.Element {
         profileTypeOptions={profileTypeOptions}
         fields={['user', 'profile', 'profile-type', 'accessPolicy', 'userConfiguration', 'active', 'admin']}
         toolbarLeft={
-          <Button
-            component={MedplumLink}
-            to="/admin/invite"
-            variant="outline"
-            color="blue"
-            leftSection={<IconUserPlus size={14} />}
-          >
-            Invite New User
-          </Button>
+          <Group gap="sm">
+            <Button
+              component={MedplumLink}
+              to="/admin/invite"
+              variant="outline"
+              color="blue"
+              leftSection={<IconUserPlus size={14} />}
+            >
+              Invite New User
+            </Button>
+            <Button
+              component={MedplumLink}
+              to="/admin/bulk-invite"
+              variant="outline"
+              color="blue"
+              leftSection={<IconUpload size={14} />}
+            >
+              Bulk Invite
+            </Button>
+          </Group>
         }
         toolbarRight={
           <Anchor

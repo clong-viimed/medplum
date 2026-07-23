@@ -3,6 +3,7 @@
 import type { JSX } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
 import { BotsPage } from './admin/BotsPage';
+import { BulkInvitePage } from './admin/BulkInvitePage';
 import { ClientsPage } from './admin/ClientsPage';
 import { CreateBotPage } from './admin/CreateBotPage';
 import { CreateClientPage } from './admin/CreateClientPage';
@@ -98,6 +99,7 @@ export function AppRoutes(): JSX.Element {
           <Route path="clients" element={<ClientsPage />} />
           <Route path="details" element={<ProjectDetailsPage />} />
           <Route path="invite" element={<InvitePage />} />
+          <Route path="bulk-invite" element={<BulkInvitePage />} />
           <Route path="patients" element={<Navigate to="/admin/users" replace />} />
           <Route path="users/:membershipId" element={<MemberDetailsPage />} />
           <Route path="users" element={<UsersPage />} />
