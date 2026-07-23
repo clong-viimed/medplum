@@ -31,7 +31,7 @@
 3. From the landing page, click **Patients** in the left menu.
 4. In the patient list, click the **Name** column filter and type `Jordan Riley`.
 5. Point out the patient header:
-   - All associated MRNs and source organizations.
+   - **Patient Identifiers** panel showing MRN, source organization, SSN, and Medicaid ID (when applicable).
    - Green **opt-in** consent banner.
 6. Open the patient chart.
    - Timeline, encounters, conditions, medications load normally.

@@ -223,7 +223,7 @@ Open the apps in separate browser windows so you can switch personas quickly.
 3. Click the **Name** column filter and type `Jordan Riley`.
 4. Confirm:
    - Patient opens without warnings.
-   - Header shows Nevada MRN and source organization.
+   - **Patient Identifiers** panel shows MRN, source organization, SSN, and Medicaid ID (when applicable).
    - Green opt-in banner is visible.
 
 **Troubleshooting**:
