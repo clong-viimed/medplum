@@ -7,7 +7,20 @@ import { useMemo } from 'react';
 import { Outlet } from 'react-router';
 import { getProjectId } from '../utils';
 
-const tabs = ['Details', 'Users', 'Clients', 'Bots', 'Secrets', 'Sites'];
+interface TabDef {
+  label: string;
+  value: string;
+}
+
+const tabs: TabDef[] = [
+  { label: 'Details', value: 'details' },
+  { label: 'Users', value: 'users' },
+  { label: 'Clients', value: 'clients' },
+  { label: 'Bots', value: 'bots' },
+  { label: 'Secrets', value: 'secrets' },
+  { label: 'Sites', value: 'sites' },
+  { label: 'Nevada C-CDA', value: 'nevada/ccda-import' },
+];
 
 export function ProjectPage(): JSX.Element {
   const medplum = useMedplum();

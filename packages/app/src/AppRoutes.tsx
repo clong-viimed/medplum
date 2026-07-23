@@ -58,6 +58,7 @@ import { ResourceVersionPage } from './resource/ResourceVersionPage';
 import { SubscriptionsPage } from './resource/SubscriptionsPage';
 import { TimelinePage } from './resource/TimelinePage';
 import { ToolsPage } from './resource/ToolsPage';
+import { CcdaImportPage } from './pages/nevada/CcdaImportPage';
 import { SecurityPage } from './SecurityPage';
 import { SetPasswordPage } from './SetPasswordPage';
 import { SignInPage } from './SignInPage';
@@ -81,6 +82,7 @@ export function AppRoutes(): JSX.Element {
         <Route path="/bulk/:resourceType" element={<BulkAppPage />} />
         <Route path="/smart" element={<SmartSearchPage />} />
         <Route path="/forms/:id" element={<FormPage />} />
+        <Route path="/admin/nevada/ccda-import" element={<CcdaImportPage />} />
         <Route path="/admin/super" element={<SuperAdminPage />} />
         <Route path="/admin/super/asyncjob/:tab" element={<SuperAdminAsyncDashboardPage />} />
         <Route path="/admin/super/asyncjob" element={<SuperAdminAsyncDashboardPage />} />
