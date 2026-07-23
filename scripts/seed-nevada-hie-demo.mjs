@@ -77,11 +77,12 @@ function parseArgs(argv) {
   return {
     dryRun: argv.includes('--dry-run'),
     help: argv.includes('--help'),
+    reset: argv.includes('--reset'),
   };
 }
 
 function printHelp() {
-  console.log(`Usage: node scripts/seed-nevada-hie-demo.mjs [--dry-run] [--help]
+  console.log(`Usage: node scripts/seed-nevada-hie-demo.mjs [--dry-run] [--reset] [--help]
 
 Seeds the Nevada HIE demo using native Medplum resources only.
 
@@ -98,6 +99,7 @@ Environment:
 Examples:
   MEDPLUM_CLIENT_ID=... MEDPLUM_CLIENT_SECRET=... node scripts/seed-nevada-hie-demo.mjs --dry-run
   MEDPLUM_CLIENT_ID=... MEDPLUM_CLIENT_SECRET=... MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD=medplum_admin node scripts/seed-nevada-hie-demo.mjs
+  MEDPLUM_CLIENT_ID=... MEDPLUM_CLIENT_SECRET=... node scripts/seed-nevada-hie-demo.mjs --reset
 `);
 }
 
@@ -627,6 +629,51 @@ async function ensurePayerRosterAccessPolicy(medplum) {
   return medplum.createResource(desired);
 }
 
+async function deleteDemoResourcesByType(client, resourceType) {
+  console.log(`  deleting ${resourceType} resources...`);
+  let count = 0;
+  let hasMore = true;
+  while (hasMore) {
+    const bundle = await client.search(resourceType, {
+      identifier: `${DEMO_TAG_SYSTEM}|`,
+      _count: '200',
+    });
+    const entries = bundle.entry ?? [];
+    if (entries.length === 0) {
+      hasMore = false;
+      break;
+    }
+    for (const entry of entries) {
+      const resource = entry.resource;
+      if (!resource?.id) {
+        continue;
+      }
+      try {
+        await client.deleteResource(resourceType, resource.id);
+        count++;
+      } catch (err) {
+        console.warn(`    failed to delete ${resourceType}/${resource.id}: ${normalizeErrorString(err)}`);
+      }
+    }
+    if (entries.length < 200) {
+      hasMore = false;
+    }
+  }
+  console.log(`    deleted ${count} ${resourceType}`);
+}
+
+async function resetDemoData(client) {
+  console.log('Resetting Nevada HIE demo data...');
+  // Delete in reverse dependency order.
+  await deleteDemoResourcesByType(client, 'ProjectMembership');
+  await deleteDemoResourcesByType(client, 'Encounter');
+  await deleteDemoResourcesByType(client, 'Consent');
+  await deleteDemoResourcesByType(client, 'Patient');
+  await deleteDemoResourcesByType(client, 'Group');
+  await deleteDemoResourcesByType(client, 'Organization');
+  console.log('Reset complete.');
+}
+
 async function main() {
   if (args.help) {
     printHelp();
@@ -635,11 +682,28 @@ async function main() {
 
   console.log('Seeding Nevada HIE demo data...');
   console.log(`  dryRun: ${args.dryRun}`);
+  console.log(`  reset: ${args.reset}`);
+
+  const projectId = process.env.MEDPLUM_PROJECT_ID || DEFAULT_PROJECT_ID;
+  console.log(`  target project: ${projectId}`);
+
+  if (args.reset) {
+    if (args.dryRun) {
+      console.log('  would delete demo resources tagged with:');
+      console.log(`    identifier system: ${DEMO_TAG_SYSTEM}`);
+      console.log('  resource types: ProjectMembership, Encounter, Consent, Patient, Group, Organization');
+      console.log('\nReset done (dry-run).');
+      return;
+    }
+    const rawResourceClient = await createResourceClientFromEnv();
+    const resourceClient = wrapWithRateLimitRetry(rawResourceClient, 'resource');
+    await resetDemoData(resourceClient);
+    console.log('\nReset done.');
+    return;
+  }
 
   const rawResourceClient = await createResourceClientFromEnv();
   const resourceClient = wrapWithRateLimitRetry(rawResourceClient, 'resource');
-  const projectId = process.env.MEDPLUM_PROJECT_ID || DEFAULT_PROJECT_ID;
-  console.log(`  target project: ${projectId}`);
 
   let adminClient;
   if (process.env.MEDPLUM_EMAIL && process.env.MEDPLUM_PASSWORD) {
@@ -750,7 +814,7 @@ async function main() {
 
   console.log('\nNevada HIE demo data seeding complete.');
   console.log('\nDemo logins:');
-  for (const [key, user] of Object.entries(DEMO_USERS)) {
+  for (const user of Object.values(DEMO_USERS)) {
     console.log(`  ${user.email} / ${demoPassword(user.email)}`);
   }
 }

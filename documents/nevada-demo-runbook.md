@@ -20,19 +20,31 @@
 
 ```bash
 cd /Users/paulwinterling/github/Demos/medplum-ubix/packages/app
-npm run dev
+npm run dev -- --port 3001
 ```
 
-Expected output: app runs on `http://localhost:3000/`. Because port `3000` may be occupied on your machine, Vite may auto-increment. The demo plan assumes `http://localhost:3001/`; if Vite reports a different port, use that port.
+Expected output: app runs on `http://localhost:3001/`.
+
+If the port is already in use, check for an existing process:
+
+```bash
+lsof -ti:3001
+```
 
 ### 1.2 medplum-provider
 
 ```bash
 cd /Users/paulwinterling/github/Demos/medplum-provider
-npm run dev
+npm run dev -- --host 127.0.0.1
 ```
 
 Expected output: app runs on `http://127.0.0.1:5172/`.
+
+If the port is already in use, check for an existing process:
+
+```bash
+lsof -ti:5172
+```
 
 ### 1.3 (Optional) medplum-patient
 
@@ -42,6 +54,15 @@ npm run dev
 ```
 
 Expected output: app runs on `http://127.0.0.1:5173/`.
+
+### 1.4 Verify apps load
+
+Open these URLs in a browser and confirm each shows a sign-in page:
+
+- `http://127.0.0.1:5172/` → "Sign in to Provider"
+- `http://localhost:3001/` → "Medplum" sign-in
+
+If you see a sign-in page, the front-end build and dev server are healthy. Full end-to-end rehearsal requires valid demo credentials (see Section 2).
 
 ---
 
@@ -323,20 +344,23 @@ Open Jordan Riley. Confirm full chart loads and timeline/encounters are visible.
 
 ## 5. Reset Demo State
 
-The existing seed script does not have a `--reset` flag. To reset, run the script with `--dry-run` first to review what exists, then delete demo resources by identifier using a small cleanup script or the Medplum admin UI filtered by the identifier system `https://hiivehealth.com/fhir/identifier/nevada-demo`.
-
-To clean all Nevada demo resources:
+The seed script now supports `--reset`:
 
 ```bash
-# 1. Find resources tagged with the demo identifier system
-curl -s "$MEDPLUM_BASE_URL/fhir/R4/Patient?identifier=https://hiivehealth.com/fhir/identifier/nevada-demo|&_count=200" \
-  -H "Authorization: Bearer $MEDPLUM_ACCESS_TOKEN" \
-  -H "X-Medplum-Project: $MEDPLUM_PROJECT_ID"
+cd /Users/paulwinterling/github/Demos/medplum-ubix
 
-# 2. Delete each resource by ID, then repeat for Encounter, Consent, Group, Organization, ProjectMembership.
+# Preview what would be deleted
+node scripts/seed-nevada-hie-demo.mjs --reset --dry-run
+
+# Delete all Nevada demo resources
+export MEDPLUM_CLIENT_ID="..."
+export MEDPLUM_CLIENT_SECRET="..."
+node scripts/seed-nevada-hie-demo.mjs --reset
 ```
 
-A future improvement is to add `--reset` to `seed-nevada-hie-demo.mjs`.
+Reset deletes resources tagged with the identifier system `https://hiivehealth.com/fhir/identifier/nevada-demo`, in dependency order:
+`ProjectMembership` → `Encounter` → `Consent` → `Patient` → `Group` → `Organization`.
+It does **not** affect other project data.
 
 ---
 
@@ -363,10 +387,12 @@ cd medplum-ubix/packages/app && npm run dev
 cd medplum-provider && npm run dev
 cd medplum-patient && npm run dev
 
-# Seed / dry-run demo
+# Seed / dry-run / reset demo
 cd medplum-ubix
 node scripts/seed-nevada-hie-demo.mjs --dry-run
 node scripts/seed-nevada-hie-demo.mjs
+node scripts/seed-nevada-hie-demo.mjs --reset --dry-run
+node scripts/seed-nevada-hie-demo.mjs --reset
 
 # Provider tests
 cd medplum-provider

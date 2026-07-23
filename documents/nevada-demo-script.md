@@ -11,12 +11,12 @@
 
 | Persona | Portal | Username | Notes |
 |---|---|---|---|
-| Dr. Alex | medplum-provider | `ubix.provider.alex@example.com` | Full provider access |
-| Sarah | medplum-provider | payer roster user | Limited to roster Group |
-| Admin Jordan | medplum-ubix | project admin | User provisioning, audit, C-CDA import |
-| Jordan Riley | (patient) | `ubix.patient.riley@example.com` | Opt-in patient |
-| Taylor Smith | (patient) | — | Not-declared patient |
-| Medicaid Member | (patient) | — | Opt-out, Medicaid override |
+| Dr. Alex | medplum-provider | `nevada.provider.alex@example.com` | Full provider access |
+| Sarah | medplum-provider | `nevada.payer.sarah@example.com` | Limited to Silver State roster |
+| Admin | medplum-ubix | project admin account | User provisioning, audit, C-CDA import |
+| Jordan Riley | (patient) | seeded patient | Opt-in patient |
+| Taylor Smith | (patient) | seeded patient | Not-declared patient |
+| Medicaid Member | (patient) | seeded patient | Opt-out, Medicaid override |
 
 ---
 
@@ -25,7 +25,7 @@
 **Narrative**: Providers sign in with native Medplum credentials. In production this would be Okta/SAML SSO with MFA; today we show native login and note the integration path.
 
 1. Open **medplum-provider** at `http://127.0.0.1:5172/`.
-2. Log in as **Dr. Alex**.
+2. Log in as **Dr. Alex** (`nevada.provider.alex@example.com`).
 3. From the landing page, click **Patients** in the left menu.
 4. Search for `Jordan Riley` by name/DOB or MRN.
 5. Point out the patient header:
@@ -81,7 +81,7 @@
 
 ## Act 3: Roster-Based Access (5 min)
 
-1. Log out, then log in as **Sarah** (payer roster user).
+1. Log out, then log in as **Sarah** (`nevada.payer.sarah@example.com`).
 2. Sarah lands on the **Roster** dashboard showing last-30-day encounters for her roster Group only.
 3. Filter by visit type (Ambulatory, Emergency, Inpatient, Home health).
 4. Sort by patient name and encounter date.
@@ -97,7 +97,7 @@
 
 ## Act 4: CDR Ingest & Document View (6 min)
 
-1. Switch to **medplum-ubix** and log in as **Admin Jordan**.
+1. Switch to **medplum-ubix** and log in with a project admin account.
 2. Navigate to **Project admin → Nevada C-CDA**.
 3. Click **Import C-CDA** and upload `packages/examples/src/nevada-ccda/sample-ccda.xml`.
 4. Optionally specify a target patient; otherwise a new patient is created.
@@ -129,7 +129,7 @@
 
 ## Act 6: Audit & Reporting (4 min)
 
-1. In **medplum-provider**, log in as an admin.
+1. In **medplum-provider**, log in with a project admin account.
 2. Click **Audit** in the left menu.
 3. Show the audit dashboard:
    - Summary metrics (total events, unique users, searches, document exports, consent updates).
@@ -153,8 +153,8 @@
 4. Click **Bulk Invite** and upload a CSV such as:
    ```csv
    firstName,lastName,email,role,admin,sendEmail
-   George,Washington,george@example.com,Practitioner,false,true
-   Sarah,Connor,sarah@example.com,Practitioner,false,true
+   George,Washington,george+nevada-test@example.com,Practitioner,false,true
+   Sarah,Connor,sarah+nevada-test@example.com,Practitioner,false,true
    ```
 5. Show the preview, then click **Invite users**.
 6. New memberships appear in the user list.
@@ -179,13 +179,13 @@
 
 ## Appendix: Demo URLs
 
-| Component | URL |
-|---|---|
-| Medplum app (admin) | `http://localhost:3001/` |
-| Provider portal | `http://127.0.0.1:5172/` |
-| Patient portal | `http://127.0.0.1:5173/` |
-| Backend | `https://api.ehr.hiivehealth.net/` |
-| Target project | `7e472dfd-3ab9-4b75-adac-38e0c5c5d6c8` |
+| Component | URL | Start command |
+|---|---|---|
+| Medplum app (admin) | `http://localhost:3001/` | `cd medplum-ubix/packages/app && npm run dev -- --port 3001` |
+| Provider portal | `http://127.0.0.1:5172/` | `cd medplum-provider && npm run dev -- --host 127.0.0.1` |
+| Patient portal | `http://127.0.0.1:5173/` | `cd medplum-patient && npm run dev` |
+| Backend | `https://api.ehr.hiivehealth.net/` | — |
+| Target project | `7e472dfd-3ab9-4b75-adac-38e0c5c5d6c8` | — |
 
 ## Appendix: Sample Bulk-Invite CSV
 
