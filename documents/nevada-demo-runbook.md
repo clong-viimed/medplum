@@ -108,7 +108,7 @@ export MEDPLUM_CLIENT_SECRET="<client-secret>"
 | Admin | medplum-ubix | project admin account | User provisioning, audit, C-CDA import |
 | Jordan Riley | (patient) | seeded patient | Opt-in patient |
 | Taylor Smith | (patient) | seeded patient | Not-declared patient |
-| Medicaid Member | (patient) | seeded patient | Opt-out, Medicaid override |
+| Casey Rivera | (patient) | seeded patient | Opt-out, Medicaid override |
 
 Use the passwords printed by `seed-nevada-hie-demo.mjs` for the provider and payer logins.
 
@@ -220,7 +220,7 @@ Open the apps in separate browser windows so you can switch personas quickly.
 
 1. In **medplum-provider** (`http://127.0.0.1:5172/`), sign in as `nevada.provider.alex@example.com` using the password printed by the seed script.
 2. Click **Patients** in the left menu.
-3. Search for `Jordan Riley`.
+3. Click the **Name** column filter and type `Jordan Riley`.
 4. Confirm:
    - Patient opens without warnings.
    - Header shows Nevada MRN and source organization.
@@ -251,7 +251,7 @@ Open Jordan Riley. Confirm full chart loads and timeline/encounters are visible.
 
 #### 2c Medicaid override
 
-1. Search for the seeded Medicaid patient (e.g., `Medicaid Member`).
+1. Search for **Casey Rivera**.
 2. Open the patient.
 3. Confirm red opt-out banner and a second banner: **"Access permitted by Medicaid override policy."**
 4. Confirm chart loads despite opt-out.
@@ -273,7 +273,7 @@ Open Jordan Riley. Confirm full chart loads and timeline/encounters are visible.
 2. Confirm landing page is the **Roster** dashboard.
 3. Confirm encounters are limited to the roster Group.
 4. Filter by visit type and sort by patient name / encounter date.
-5. In the **Patients** search, look for a patient **not** in the roster Group (e.g., `Medicaid Member`).
+5. In the **Patients** search, look for a patient **not** in the roster Group (e.g., **Casey Rivera**).
 6. Confirm no results.
 
 **Troubleshooting**:

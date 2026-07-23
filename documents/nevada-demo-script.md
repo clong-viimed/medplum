@@ -18,7 +18,7 @@
 | Admin | medplum-ubix | `admin@example.com` | `medplum_admin` | User provisioning, audit, C-CDA import |
 | Jordan Riley | (patient) | seeded patient | — | Opt-in patient |
 | Taylor Smith | (patient) | seeded patient | — | Not-declared patient |
-| Medicaid Member | (patient) | seeded patient | — | Opt-out, Medicaid override |
+| Casey Rivera | (patient) | seeded patient | — | Opt-out, Medicaid override |
 
 ---
 
@@ -29,7 +29,7 @@
 1. Open **medplum-provider** at `http://127.0.0.1:5172/`.
 2. Log in as **Dr. Alex** (`nevada.provider.alex@example.com` / `Nevada-5637c857-Demo!`).
 3. From the landing page, click **Patients** in the left menu.
-4. Search for `Jordan Riley` by name/DOB or MRN.
+4. In the patient list, click the **Name** column filter and type `Jordan Riley`.
 5. Point out the patient header:
    - All associated MRNs and source organizations.
    - Green **opt-in** consent banner.
@@ -62,7 +62,7 @@
 
 ### 2c Medicaid override (opt-out)
 
-1. Search for the **Medicaid Member** patient.
+1. Search for **Casey Rivera**.
 2. Open the record.
 3. Show the red **opt-out** banner, but chart still loads because `Patient.identifier` matches the Medicaid payer system.
 4. Banner reads: "Access permitted by Medicaid override policy."

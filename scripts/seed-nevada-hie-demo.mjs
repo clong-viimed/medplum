@@ -249,17 +249,50 @@ function demoPassword(email) {
 }
 
 function patientName(index) {
+  // Reserve the first three seeded patients for the demo personas so the script
+  // matches the runbook exactly.
+  const demoPersonas = [
+    { firstName: 'Jordan', lastName: 'Riley' },
+    { firstName: 'Taylor', lastName: 'Smith' },
+    { firstName: 'Casey', lastName: 'Rivera' },
+  ];
+  if (index < demoPersonas.length) {
+    const { firstName, lastName } = demoPersonas[index];
+    return { firstName, lastName, display: `${firstName} ${lastName}` };
+  }
+
   const firstName = PATIENT_FIRST_NAMES[index % PATIENT_FIRST_NAMES.length];
   const lastName = PATIENT_LAST_NAMES[Math.floor(index / PATIENT_FIRST_NAMES.length) % PATIENT_LAST_NAMES.length];
   return { firstName, lastName, display: `${firstName} ${lastName}` };
 }
 
 function patientBirthDate(index) {
-  // Ages roughly 22-72
+  // Ages roughly 22-72; demo personas get fixed realistic DOBs.
+  const demoBirthDates = ['1985-03-12', '1992-07-24', '1978-11-05'];
+  if (index < demoBirthDates.length) {
+    return demoBirthDates[index];
+  }
   const year = 1954 + (index % 50);
   const month = 1 + (index % 12);
   const day = 1 + (index % 28);
   return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+}
+
+function demoPatientConsentStatus(index) {
+  // Demo personas: opt-in, not-declared, Medicaid opt-out.
+  const demoStatuses = ['opt-in', 'not-declared', 'opt-out'];
+  if (index < demoStatuses.length) {
+    return demoStatuses[index];
+  }
+  return consentStatus(index);
+}
+
+function demoPatientIsMedicaid(index) {
+  // Third demo persona is the Medicaid override patient.
+  if (index === 2) {
+    return true;
+  }
+  return isMedicaid(index);
 }
 
 function patientGender(index) {
@@ -357,7 +390,7 @@ async function ensurePatient(medplum, index, payerGroupRefs) {
         system: `https://${orgId}.example/mrn`,
         value: `MRN-${10000 + index}`,
       },
-      ...(isMedicaid(index)
+      ...(demoPatientIsMedicaid(index)
         ? [{ system: 'https://medicaid.nv.gov/member-id', value: `NV-MCD-${100000 + index}` }]
         : []),
     ],
@@ -813,7 +846,7 @@ async function main() {
 
   for (let i = 0; i < patientCount; i++) {
     const patient = await ensurePatient(resourceClient, i, payerGroupRefs);
-    const status = consentStatus(i);
+    const status = demoPatientConsentStatus(i);
     await ensureConsent(resourceClient, patient, status, i, payerGroupRefs);
     await ensureEncounter(resourceClient, patient, i, payerGroupRefs);
 
