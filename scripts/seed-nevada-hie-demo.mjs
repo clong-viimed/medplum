@@ -27,6 +27,7 @@ const HIGH_DESERT_HEALTH_ID = 'nevada-demo-payer-high-desert';
 
 const CONSENT_CATEGORY_SYSTEM = 'http://loinc.org';
 const DEMO_TAG_SYSTEM = 'https://hiivehealth.com/fhir/identifier/nevada-demo';
+const ROSTER_GROUP_EXTENSION = 'https://hiivehealth.com/fhir/StructureDefinition/nevada-roster-group';
 
 const DEMO_USERS = {
   providerAlex: {
@@ -541,6 +542,7 @@ async function ensureUser(adminClient, key, role, accessPolicyReferenceValue, gr
         accessPolicy: { reference: accessPolicyReferenceValue },
       };
 
+  let resultMembership;
   if (existingMembership) {
     const updated = {
       ...existingMembership,
@@ -549,32 +551,79 @@ async function ensureUser(adminClient, key, role, accessPolicyReferenceValue, gr
       access: undefined,
       ...membershipAccess,
     };
-    await adminClient.updateResource(updated);
-    return { email: user.email, status: 'updated', id: existingMembership.id };
+    resultMembership = await adminClient.updateResource(updated);
+  } else {
+    resultMembership = await adminClient.invite(projectId, {
+      resourceType,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      externalId: membershipIdentifier,
+      password,
+      sendEmail: false,
+      upsert: true,
+      membership: {
+        identifier: [demoIdentifier(membershipIdentifier)],
+        ...membershipAccess,
+        admin: role === 'admin',
+      },
+    });
   }
 
-  const membership = await adminClient.invite(projectId, {
-    resourceType,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    email: user.email,
-    externalId: membershipIdentifier,
-    password,
-    sendEmail: false,
-    upsert: true,
-    membership: {
-      identifier: [demoIdentifier(membershipIdentifier)],
-      ...membershipAccess,
-      admin: role === 'admin',
-    },
-  });
+  if (groupReference) {
+    await ensureProfileRosterExtension(adminClient, resultMembership, groupReference);
+  }
 
-  return { email: user.email, status: 'created', id: membership.id, password };
+  return { email: user.email, status: existingMembership ? 'updated' : 'created', id: resultMembership.id, password };
+}
+
+async function ensureProfileRosterExtension(adminClient, membership, groupReference) {
+  const profileRef = membership.profile;
+  if (!profileRef?.reference) {
+    return;
+  }
+
+  const [resourceType, id] = profileRef.reference.split('/');
+  const profile = await adminClient.readResource(resourceType, id);
+  const existingExtension = profile.extension?.find((e) => e.url === ROSTER_GROUP_EXTENSION);
+  if (existingExtension && existingExtension.valueReference?.reference === groupReference.reference) {
+    return;
+  }
+
+  const desired = {
+    ...profile,
+    extension: [
+      ...(profile.extension || []).filter((e) => e.url !== ROSTER_GROUP_EXTENSION),
+      {
+        url: ROSTER_GROUP_EXTENSION,
+        valueReference: groupReference,
+      },
+    ],
+  };
+  await adminClient.updateResource(desired);
 }
 
 async function ensureProviderAccessPolicy(medplum) {
   const id = process.env.MEDPLUM_PROVIDER_ACCESS_POLICY || DEFAULT_PROVIDER_ACCESS_POLICY_ID;
-  return medplum.readResource('AccessPolicy', id);
+  const existing = await medplum.readResource('AccessPolicy', id);
+
+  const hasConsent = existing.resource?.some((r) => r.resourceType === 'Consent');
+  if (hasConsent) {
+    return existing;
+  }
+
+  const desired = {
+    ...existing,
+    resource: [
+      ...(existing.resource || []),
+      {
+        resourceType: 'Consent',
+        interaction: ['read', 'search', 'history', 'vread'],
+      },
+    ],
+  };
+
+  return medplum.updateResource(desired);
 }
 
 async function ensurePayerRosterAccessPolicy(medplum) {
