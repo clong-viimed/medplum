@@ -42,6 +42,7 @@ case "$action" in
     npx cdk deploy -c config="$config_file" --require-approval never
     ;;
   describe)
+    build_workspace @medplum/cli || return $?
     node packages/cli/dist/cjs/index.cjs aws describe build
     ;;
   *)
