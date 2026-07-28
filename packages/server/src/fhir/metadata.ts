@@ -148,6 +148,16 @@ const supportedOperations: Record<string, CapabilityStatementRestResourceOperati
       definition: 'http://hl7.org/fhir/uv/bulkdata/OperationDefinition/group-export',
     },
   ],
+  Patient: [
+    {
+      name: 'ccda-export',
+      definition: 'https://www.medplum.com/fhir/OperationDefinition/patient-ccda-export',
+    },
+    {
+      name: 'ccda-import',
+      definition: 'https://www.medplum.com/fhir/OperationDefinition/patient-ccda-import',
+    },
+  ],
 };
 
 /**

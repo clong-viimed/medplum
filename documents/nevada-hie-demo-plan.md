@@ -61,7 +61,7 @@ Nevada HIE will use Smile Digital Health as the CDR. Smile does not provide a us
 - **Sarah** — payer roster user, limited to her roster
 - **Jordan Riley** — patient (opt-in)
 - **Taylor Smith** — patient (not declared, break-the-glass required)
-- **Casey Rivera** — patient (opt-out, but Medicaid override applies)
+- **Casey Riverton** — patient (opt-out, but Medicaid override applies)
 
 ### Act 1: Provider Login & Patient Search (5 min)
 1. Dr. Alex signs in with native Medplum credentials into `medplum-provider` portal. (SSO/Okta is not configured for the demo; note it is supported.)
@@ -72,7 +72,7 @@ Nevada HIE will use Smile Digital Health as the CDR. Smile does not provide a us
 ### Act 2: Consent Enforcement (7 min)
 1. Open opt-in patient → full chart loads.
 2. Open not-declared patient → click “Break the glass”, enter reason; chart loads and `AuditEvent` is written.
-3. Open opt-out Medicaid patient (Casey Rivera) → chart loads automatically with Medicaid override banner.
+3. Open opt-out Medicaid patient (Casey Riverton) → chart loads automatically with Medicaid override banner.
 4. Update consent manually → status changes and is audited.
 
 ### Act 3: Roster-Based Access (5 min)

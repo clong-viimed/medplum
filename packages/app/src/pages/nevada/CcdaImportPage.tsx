@@ -2,19 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Alert, Button, FileButton, Group, Loader, Paper, Stack, Text, Textarea, Title } from '@mantine/core';
 import { showNotification } from '@mantine/notifications';
-import { convertCcdaToFhir, parseXml } from '@medplum/ccda';
-import { normalizeErrorString } from '@medplum/core';
-import type { Bundle, Resource } from '@medplum/fhirtypes';
+import { ContentType, normalizeErrorString } from '@medplum/core';
+import type { OperationOutcome } from '@medplum/fhirtypes';
 import { useMedplum } from '@medplum/react';
 import type { JSX } from 'react';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router';
 
 export function CcdaImportPage(): JSX.Element {
   const medplum = useMedplum();
+  const [searchParams] = useSearchParams();
+  const patientId = searchParams.get('patient') ?? undefined;
   const [xml, setXml] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const [lastResult, setLastResult] = useState<Bundle | undefined>();
+  const [lastResult, setLastResult] = useState<OperationOutcome | undefined>();
 
   const handleFileSelect = (file: File | null): void => {
     if (!file) {
@@ -45,38 +47,30 @@ export function CcdaImportPage(): JSX.Element {
     setLastResult(undefined);
 
     try {
-      const parsed = parseXml(xml);
-      const bundle = convertCcdaToFhir(parsed);
+      if (!patientId) {
+        throw new Error('Native C-CDA import requires a patient context. Open Import C-CDA from a patient chart.');
+      }
 
-      const entries =
-        bundle.entry
-          ?.map((entry) => {
-            const resource = entry.resource;
-            if (!resource) {
-              return undefined;
-            }
-            const url = resource.id ? `${resource.resourceType}/${resource.id}` : resource.resourceType;
-            return {
-              request: { method: resource.id ? ('PUT' as const) : ('POST' as const), url },
-              resource,
-            };
-          })
-          .filter((e): e is { request: { method: 'POST' | 'PUT'; url: string }; resource: Resource } => !!e) ?? [];
+      const response = await medplum.post<OperationOutcome>(
+        medplum.fhirUrl('Patient', patientId, '$ccda-import'),
+        xml,
+        ContentType.CDA_XML,
+        {
+          cache: 'no-cache',
+        }
+      );
 
-      const response = await medplum.executeBatch({
-        resourceType: 'Bundle',
-        type: 'transaction',
-        entry: entries,
-      });
-
+      setLastResult(response);
       showNotification({
         title: 'C-CDA imported',
-        message: `Imported ${response.entry?.length ?? 0} resources`,
+        message: 'The native Medplum $ccda-import operation completed.',
         color: 'green',
       });
-      setLastResult(response);
     } catch (err) {
-      const message = normalizeErrorString(err);
+      const message =
+        normalizeErrorString(err) === 'Not found'
+          ? 'Native Medplum $ccda-import is not available on the configured backend.'
+          : normalizeErrorString(err);
       setError(message);
       showNotification({ title: 'Import failed', message, color: 'red' });
     } finally {
@@ -89,8 +83,14 @@ export function CcdaImportPage(): JSX.Element {
       <Stack gap="md">
         <Title order={2}>Import C-CDA Document</Title>
         <Text c="dimmed">
-          Upload or paste a C-CDA XML document to convert it to FHIR resources and import it into the CDR.
+          Upload or paste a C-CDA XML document to import it with Medplum&apos;s native patient $ccda-import operation.
         </Text>
+
+        {!patientId && (
+          <Alert color="yellow">
+            Open this page from a patient chart to provide the patient context required by Medplum&apos;s native import.
+          </Alert>
+        )}
 
         <Group>
           <FileButton onChange={handleFileSelect} accept=".xml,.txt">
@@ -114,7 +114,7 @@ export function CcdaImportPage(): JSX.Element {
         {error && <Alert color="red">{error}</Alert>}
 
         <Group>
-          <Button onClick={handleImport} loading={loading} disabled={!xml.trim()}>
+          <Button onClick={handleImport} loading={loading} disabled={!xml.trim() || !patientId}>
             Import
           </Button>
         </Group>
@@ -123,8 +123,7 @@ export function CcdaImportPage(): JSX.Element {
 
         {lastResult && (
           <Alert color="green">
-            Imported {lastResult.entry?.length ?? 0} resources. Open the patient timeline to review the imported
-            data.
+            Native import completed. Open the patient timeline to review the imported data.
           </Alert>
         )}
       </Stack>

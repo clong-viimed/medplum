@@ -67,6 +67,10 @@ describe('FHIR Routes', () => {
     const res = await request(app).get(`/fhir/R4/metadata`);
     expect(res.status).toBe(200);
     expect(res.body.resourceType).toStrictEqual('CapabilityStatement');
+    const patientEntry = res.body.rest?.[0]?.resource?.find((resource: { type: string }) => resource.type === 'Patient');
+    expect(patientEntry?.operation?.map((operation: { name: string }) => operation.name)).toEqual(
+      expect.arrayContaining(['ccda-import', 'ccda-export'])
+    );
   });
 
   test('Get CapabilityStatement authenticated', async () => {

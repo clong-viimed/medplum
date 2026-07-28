@@ -76,7 +76,7 @@ describe('CcdaImportPage', () => {
 
   const setup = (): ReturnType<typeof render> =>
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/admin/nevada/ccda-import?patient=123']}>
         <MedplumProvider medplum={medplum}>
           <MantineProvider>
             <Notifications />
@@ -93,10 +93,9 @@ describe('CcdaImportPage', () => {
 
   test('imports C-CDA and shows success', async () => {
     const user = userEvent.setup();
-    const executeBatchSpy = vi.spyOn(medplum, 'executeBatch').mockResolvedValueOnce({
-      resourceType: 'Bundle',
-      type: 'batch-response',
-      entry: [{ response: { status: '201' } }],
+    const postSpy = vi.spyOn(medplum, 'post').mockResolvedValueOnce({
+      resourceType: 'OperationOutcome',
+      issue: [],
     });
 
     setup();
@@ -106,9 +105,9 @@ describe('CcdaImportPage', () => {
     await user.click(screen.getByRole('button', { name: /import/i }));
 
     await waitFor(() => {
-      expect(executeBatchSpy).toHaveBeenCalled();
+      expect(postSpy).toHaveBeenCalled();
     });
-    expect(screen.getByText(/imported 1 resources/i)).toBeInTheDocument();
+    expect(screen.getByText(/native import completed/i)).toBeInTheDocument();
   });
 
   test('shows error for invalid XML', async () => {
@@ -122,5 +121,21 @@ describe('CcdaImportPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
     });
+  });
+
+  test('requires patient context for native import', async () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/nevada/ccda-import']}>
+        <MedplumProvider medplum={medplum}>
+          <MantineProvider>
+            <Notifications />
+            <CcdaImportPage />
+          </MantineProvider>
+        </MedplumProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/requires a patient context/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /import/i })).toBeDisabled();
   });
 });

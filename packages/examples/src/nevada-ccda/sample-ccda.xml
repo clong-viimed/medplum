@@ -6,7 +6,7 @@
   <id root="12345678-1234-1234-1234-123456789012"/>
   <code code="34133-9" codeSystem="2.16.840.1.113883.6.1" displayName="Summarization of episode note"/>
   <title>Nevada Demo C-CDA</title>
-  <effectiveTime value="20260723120000+0000"/>
+  <effectiveTime value="20260728120000+0000"/>
   <confidentialityCode code="N" codeSystem="2.16.840.1.113883.5.25"/>
   <languageCode code="en-US"/>
   <recordTarget>
@@ -32,7 +32,7 @@
     </patientRole>
   </recordTarget>
   <author>
-    <time value="20260723120000+0000"/>
+    <time value="20260728120000+0000"/>
     <assignedAuthor>
       <id root="2.16.840.1.113883.4.6" extension="1234567890"/>
       <assignedPerson>
@@ -48,6 +48,7 @@
     <structuredBody>
       <component>
         <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.5.1"/>
           <code code="11450-4" codeSystem="2.16.840.1.113883.6.1" displayName="Problem List"/>
           <title>Problems</title>
           <entry>
@@ -68,6 +69,7 @@
       </component>
       <component>
         <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.3.1"/>
           <code code="30954-2" codeSystem="2.16.840.1.113883.6.1" displayName="Results"/>
           <title>Results</title>
           <entry>
@@ -93,14 +95,15 @@
       </component>
       <component>
         <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.22.1"/>
           <code code="46240-8" codeSystem="2.16.840.1.113883.6.1" displayName="Encounters"/>
           <title>Encounters</title>
           <entry>
             <encounter classCode="ENC" moodCode="EVN">
               <code code="99213" codeSystem="2.16.840.1.113883.6.12" displayName="Office Visit"/>
               <effectiveTime>
-                <low value="20260723110000+0000"/>
-                <high value="20260723113000+0000"/>
+                <low value="20260728110000+0000"/>
+                <high value="20260728113000+0000"/>
               </effectiveTime>
             </encounter>
           </entry>

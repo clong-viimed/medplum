@@ -210,7 +210,7 @@ export async function initApp(app: Express, config: MedplumServerConfig): Promis
   app.post('/fhir/R4', authenticateRequest, asyncBatchHandler(config));
 
   app.use(urlencoded({ extended: false }));
-  app.use(text({ type: [ContentType.TEXT, ContentType.HL7_V2] }));
+  app.use(text({ type: [ContentType.TEXT, ContentType.HL7_V2, ContentType.XML, ContentType.CDA_XML] }));
   app.use(json({ type: JSON_TYPE, limit: config.maxJsonSize }));
   app.use(
     hl7BodyParser({

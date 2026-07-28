@@ -15,10 +15,11 @@
 | Dr. Jordan | medplum-provider | `nevada.provider.jordan@example.com` | `Nevada-51659e51-Demo!` | Full provider access |
 | Sarah | medplum-provider | `nevada.payer.sarah@example.com` | `Nevada-410d4b60-Demo!` | Limited to Silver State roster |
 | Miguel | medplum-provider | `nevada.payer.miguel@example.com` | `Nevada-36a6ee96-Demo!` | Limited to High Desert roster |
-| Admin | medplum-ubix | `admin@example.com` | `medplum_admin` | User provisioning, audit, C-CDA import |
+| Admin | medplum-ubix | `admin@example.com` | `medplum_admin` | User provisioning, C-CDA import |
+| Nevada Admin | medplum-provider | `nevada.admin@example.com` | `Nevada-669a1e03-Demo!` | Audit dashboard and reporting |
 | Jordan Riley | (patient) | seeded patient | — | Opt-in patient |
 | Taylor Smith | (patient) | seeded patient | — | Not-declared patient |
-| Casey Rivera | (patient) | seeded patient | — | Opt-out, Medicaid override |
+| Casey Riverton | (patient) | seeded patient | — | Opt-out, Medicaid override |
 
 ---
 
@@ -29,7 +30,7 @@
 1. Open **medplum-provider** at `http://127.0.0.1:5172/`.
 2. Log in as **Dr. Alex** (`nevada.provider.alex@example.com` / `Nevada-5637c857-Demo!`).
 3. From the landing page, click **Patients** in the left menu.
-4. In the patient list, click the **Name** column filter and type `Jordan Riley`.
+4. In the patient list, filter by **Name** = `Jordan Riley` and **DOB** = `1985-03-12`.
 5. Point out the patient header:
    - **Patient Identifiers** panel showing MRN, source organization, SSN, and Medicaid ID (when applicable).
    - Green **opt-in** consent banner.
@@ -47,12 +48,12 @@
 
 ### 2a Opt-in patient
 
-1. With Dr. Alex, open **Jordan Riley**.
+1. With Dr. Alex, open **Jordan Riley** (DOB `1985-03-12`).
 2. Confirm the green opt-in banner and full chart access.
 
 ### 2b Break-the-glass (not declared)
 
-1. Search for **Taylor Smith**.
+1. Search for **Taylor Smith** (DOB `1992-07-24`).
 2. Open the patient record.
 3. Show the yellow **not declared** banner and disabled chart.
 4. Click **Break the glass**.
@@ -60,20 +61,20 @@
 6. Chart loads.
 7. In **medplum-ubix**, open **AuditEvent** search and filter by `Taylor Smith` to show the break-glass `AuditEvent`.
 
-### 2c Medicaid override (opt-out)
+### 2c Update consent
 
-1. Search for **Casey Rivera**.
-2. Open the record.
-3. Show the red **opt-out** banner, but chart still loads because `Patient.identifier` matches the Medicaid payer system.
-4. Banner reads: "Access permitted by Medicaid override policy."
-
-### 2d Update consent
-
-1. Still as Dr. Alex, open **Taylor Smith**.
+1. Still as Dr. Alex, open **Taylor Smith** (DOB `1992-07-24`).
 2. Click **Update consent**.
 3. Change status from **not declared** to **opt-in**.
 4. Save.
-5. Show the resulting `Consent`, `Provenance`, and `AuditEvent` resources in medplum-ubix.
+5. Show the resulting `Consent` resources in medplum-ubix.
+
+### 2d Medicaid override (opt-out)
+
+1. Search for **Casey Riverton** (DOB `1978-11-05`).
+2. Open the record.
+3. Show the red **opt-out** banner, but chart still loads because `Patient.identifier` matches the Medicaid payer system.
+4. Banner reads: "Access permitted by Medicaid override policy."
 
 **Talking points**:
 - AccessPolicy rules combine `Consent.status`, break-glass reason capture, and Medicaid identifier override.
@@ -87,13 +88,20 @@
 2. Sarah lands on the **Roster** dashboard showing last-30-day encounters for her roster Group only.
 3. Filter by visit type (Ambulatory, Emergency, Inpatient, Home health).
 4. Sort by patient name and encounter date.
-5. Try to search for a patient **not** on the roster.
+5. Try to search for a patient **not on your roster**.
+   - Example: as **Sarah** (Silver State Plan), search for **Taylor Smith** (DOB `1992-07-24`).
+   - Taylor Smith is on the High Desert Health roster, not Silver State.
    - Result: no results / access denied.
-6. Switch to the **Patients** view; search is still scoped to the roster Group.
+6. Switch to the **Gaps in Care** tab.
+   - Show a diabetic patient overdue for an A1C lab.
+   - Show a patient with an active medication who has not refilled in 90+ days.
+   - Click a patient name to open the chart.
+7. Switch to the **Patients** view; search is still scoped to the roster Group.
 
 **Talking points**:
 - Payer roster access is enforced by an AccessPolicy parameterized against `%roster_group`.
 - `Group.member` references drive the patient compartment; no custom authorization code is required.
+- Care gaps are derived from FHIR `Condition`, `Observation`, and `MedicationRequest` resources — no separate rules engine is required.
 
 ---
 
@@ -102,15 +110,19 @@
 1. Switch to **medplum-ubix** and log in with the project admin account (`admin@example.com` / `medplum_admin`).
 2. Navigate to **Project admin → Nevada C-CDA**.
 3. Click **Import C-CDA** and upload `packages/examples/src/nevada-ccda/sample-ccda.xml`.
-4. Optionally specify a target patient; otherwise a new patient is created.
-5. Submit and show the resulting resources:
-   - `Patient`, `Encounter`, `Observation`, `Condition`, `MedicationRequest`, `DocumentReference`.
-6. Open the newly created/merged patient in **medplum-provider**.
-7. Click **Timeline**; point to the imported document and derived resources.
+4. Explain that the page now calls Medplum's native `Patient/{id}/$ccda-import` operation.
+5. Note that the currently configured backend does **not** expose `$ccda-import`, so the UI will report that native import is unavailable rather than performing a client-side conversion.
+6. Switch to the prepared patient chart in **medplum-provider** and show the target post-import view:
+   - `Condition` / problem list entries
+   - `Observation` / lab results
+   - `Encounter` history
+   - `DocumentReference` / document tab
+7. Click **Timeline** and explain that this is the view the native import would populate once the backend operation is deployed.
 
 **Talking points**:
-- `@medplum/ccda` converts CDA ↔ FHIR natively.
-- In production the portal would read CDA documents from Smile via FHIR DocumentReference/$docref; today we ingest a sample directly to demonstrate conversion.
+- `$ccda-export` is available natively today; native `$ccda-import` requires backend support and is not currently deployed on the configured environment.
+- The frontend is wired to the native Medplum import path; no custom client-side CDA parsing is being used in the admin UI.
+- In production the portal would read CDA documents from Smile via FHIR `DocumentReference` / `$docref`; native Medplum import remains the cleanest demo path once enabled server-side.
 - HL7 v2 ingest and Smile connectivity are noted as out of scope.
 
 ---
@@ -131,7 +143,7 @@
 
 ## Act 6: Audit & Reporting (4 min)
 
-1. In **medplum-provider**, log in with a project admin account.
+1. In **medplum-provider**, log in as **Nevada Admin** (`nevada.admin@example.com` / `Nevada-669a1e03-Demo!`).
 2. Click **Audit** in the left menu.
 3. Show the audit dashboard:
    - Summary metrics (total events, unique users, searches, document exports, consent updates).

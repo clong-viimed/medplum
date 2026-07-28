@@ -26,6 +26,7 @@ import { binaryPresignedUrlHandler } from './operations/binary-presigned-url';
 import { appointmentBookHandler } from './operations/book';
 import { botInitHandler } from './operations/botinit';
 import { ccdaExportHandler } from './operations/ccdaexport';
+import { ccdaImportHandler } from './operations/ccdaimport';
 import { chargeItemDefinitionApplyHandler } from './operations/chargeitemdefinitionapply';
 import { claimExportGetHandler, claimExportPostHandler } from './operations/claimexport';
 import { clearAllWsSubsHandler } from './operations/clearallwssubs';
@@ -349,6 +350,9 @@ function initInternalFhirRouter(): FhirRouter {
   // Patient $ccda-export operation
   router.add('GET', '/Patient/:id/$ccda-export', ccdaExportHandler);
   router.add('POST', '/Patient/:id/$ccda-export', ccdaExportHandler);
+
+  // Patient $ccda-import operation
+  router.add('POST', '/Patient/:id/$ccda-import', ccdaImportHandler);
 
   // QuestionnaireResponse $extract operation
   router.add('GET', '/QuestionnaireResponse/:id/$extract', extractHandler);

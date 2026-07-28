@@ -54,6 +54,12 @@ const DEMO_USERS = {
     lastName: 'Rodriguez',
     display: 'Miguel Rodriguez, High Desert Health',
   },
+  adminNevada: {
+    email: 'nevada.admin@example.com',
+    firstName: 'Nevada',
+    lastName: 'Admin',
+    display: 'Nevada Demo Admin',
+  },
 };
 
 const PATIENT_FIRST_NAMES = [
@@ -248,22 +254,39 @@ function demoPassword(email) {
   return `Nevada-${sha256ish(email)}-Demo!`;
 }
 
+const RESERVED_DEMO_NAMES = new Set([
+  'jordan riley',
+  'taylor smith',
+  'casey riverton',
+]);
+
 function patientName(index) {
   // Reserve the first three seeded patients for the demo personas so the script
   // matches the runbook exactly.
   const demoPersonas = [
     { firstName: 'Jordan', lastName: 'Riley' },
     { firstName: 'Taylor', lastName: 'Smith' },
-    { firstName: 'Casey', lastName: 'Rivera' },
+    { firstName: 'Casey', lastName: 'Riverton' },
   ];
   if (index < demoPersonas.length) {
     const { firstName, lastName } = demoPersonas[index];
     return { firstName, lastName, display: `${firstName} ${lastName}` };
   }
 
-  const firstName = PATIENT_FIRST_NAMES[index % PATIENT_FIRST_NAMES.length];
-  const lastName = PATIENT_LAST_NAMES[Math.floor(index / PATIENT_FIRST_NAMES.length) % PATIENT_LAST_NAMES.length];
-  return { firstName, lastName, display: `${firstName} ${lastName}` };
+  // Skip any generated name that collides with a demo persona so searches return exactly one match.
+  let offset = 0;
+  let firstName;
+  let lastName;
+  let display;
+  do {
+    const nameIndex = index + offset;
+    firstName = PATIENT_FIRST_NAMES[nameIndex % PATIENT_FIRST_NAMES.length];
+    lastName = PATIENT_LAST_NAMES[Math.floor(nameIndex / PATIENT_FIRST_NAMES.length) % PATIENT_LAST_NAMES.length];
+    display = `${firstName} ${lastName}`;
+    offset++;
+  } while (RESERVED_DEMO_NAMES.has(display.toLowerCase()));
+
+  return { firstName, lastName, display };
 }
 
 function patientBirthDate(index) {
@@ -541,6 +564,193 @@ async function ensureEncounter(medplum, patient, index, payerGroupRefs) {
   return medplum.createResource(desired);
 }
 
+async function ensureCondition(medplum, patient, index, payerGroupRefs, code, display) {
+  const id = `nevada-demo-condition-${index}`;
+  const existing = await medplum.searchOne('Condition', {
+    identifier: `${DEMO_TAG_SYSTEM}|${id}`,
+  });
+
+  const payerId = payerForPatient(index);
+  const desired = {
+    ...(existing || {}),
+    resourceType: 'Condition',
+    meta: {
+      account: { reference: `Group/${payerGroupRefs[payerId]}`, display: payerId },
+    },
+    identifier: [demoIdentifier(id)],
+    clinicalStatus: {
+      coding: [
+        {
+          system: 'http://terminology.hl7.org/CodeSystem/condition-clinical',
+          code: 'active',
+          display: 'Active',
+        },
+      ],
+    },
+    verificationStatus: {
+      coding: [
+        {
+          system: 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
+          code: 'confirmed',
+          display: 'Confirmed',
+        },
+      ],
+    },
+    category: [
+      {
+        coding: [
+          {
+            system: 'http://terminology.hl7.org/CodeSystem/condition-category',
+            code: 'problem-list-item',
+            display: 'Problem List Item',
+          },
+        ],
+      },
+    ],
+    code: {
+      coding: [
+        {
+          system: 'http://snomed.info/sct',
+          code,
+          display,
+        },
+        {
+          system: 'http://hl7.org/fhir/sid/icd-10-cm',
+          code: code === '73211009' ? 'E11.9' : code,
+          display,
+        },
+      ],
+      text: display,
+    },
+    subject: { reference: `Patient/${patient.id}`, display: patient.name?.[0]?.family },
+    onsetDateTime: '2024-01-15T00:00:00.000Z',
+    recordedDate: '2024-01-15T00:00:00.000Z',
+  };
+
+  if (existing) {
+    return medplum.updateResource({ ...desired, id: existing.id });
+  }
+  return medplum.createResource(desired);
+}
+
+async function ensureMedicationRequest(medplum, patient, index, payerGroupRefs, medicationDisplay) {
+  const id = `nevada-demo-medication-${index}`;
+  const existing = await medplum.searchOne('MedicationRequest', {
+    identifier: `${DEMO_TAG_SYSTEM}|${id}`,
+  });
+
+  const payerId = payerForPatient(index);
+  const authoredOn = new Date('2026-07-23T00:00:00.000Z');
+  authoredOn.setUTCDate(authoredOn.getUTCDate() - 120);
+
+  const desired = {
+    ...(existing || {}),
+    resourceType: 'MedicationRequest',
+    meta: {
+      account: { reference: `Group/${payerGroupRefs[payerId]}`, display: payerId },
+    },
+    identifier: [demoIdentifier(id)],
+    status: 'active',
+    intent: 'order',
+    medicationCodeableConcept: {
+      text: medicationDisplay,
+      coding: [
+        {
+          system: 'http://www.nlm.nih.gov/research/umls/rxnorm',
+          code: '1049639',
+          display: medicationDisplay,
+        },
+      ],
+    },
+    subject: { reference: `Patient/${patient.id}`, display: patient.name?.[0]?.family },
+    authoredOn: authoredOn.toISOString(),
+    dosageInstruction: [
+      {
+        text: 'Take once daily',
+        timing: {
+          repeat: {
+            frequency: 1,
+            period: 1,
+            periodUnit: 'd',
+          },
+        },
+      },
+    ],
+    dispenseRequest: {
+      quantity: {
+        value: 30,
+        unit: 'tablet',
+        system: 'http://unitsofmeasure.org',
+        code: '{tbl}',
+      },
+      numberOfRepeatsAllowed: 5,
+      expectedSupplyDuration: {
+        value: 30,
+        unit: 'days',
+        system: 'http://unitsofmeasure.org',
+        code: 'd',
+      },
+    },
+  };
+
+  if (existing) {
+    return medplum.updateResource({ ...desired, id: existing.id });
+  }
+  return medplum.createResource(desired);
+}
+
+async function ensureObservation(medplum, patient, index, payerGroupRefs, code, display, value, unit, date) {
+  const id = `nevada-demo-observation-${index}`;
+  const existing = await medplum.searchOne('Observation', {
+    identifier: `${DEMO_TAG_SYSTEM}|${id}`,
+  });
+
+  const payerId = payerForPatient(index);
+  const desired = {
+    ...(existing || {}),
+    resourceType: 'Observation',
+    meta: {
+      account: { reference: `Group/${payerGroupRefs[payerId]}`, display: payerId },
+    },
+    identifier: [demoIdentifier(id)],
+    status: 'final',
+    category: [
+      {
+        coding: [
+          {
+            system: 'http://terminology.hl7.org/CodeSystem/observation-category',
+            code: 'laboratory',
+            display: 'Laboratory',
+          },
+        ],
+      },
+    ],
+    code: {
+      coding: [
+        {
+          system: 'http://loinc.org',
+          code,
+          display,
+        },
+      ],
+      text: display,
+    },
+    subject: { reference: `Patient/${patient.id}`, display: patient.name?.[0]?.family },
+    effectiveDateTime: date,
+    valueQuantity: {
+      value,
+      unit,
+      system: 'http://unitsofmeasure.org',
+      code: unit,
+    },
+  };
+
+  if (existing) {
+    return medplum.updateResource({ ...desired, id: existing.id });
+  }
+  return medplum.createResource(desired);
+}
+
 async function ensureUser(adminClient, key, role, accessPolicyReferenceValue, groupReference) {
   const user = DEMO_USERS[key];
   const membershipIdentifier = `nevada-demo-membership-${key}`;
@@ -640,18 +850,18 @@ async function ensureProviderAccessPolicy(medplum) {
   const id = process.env.MEDPLUM_PROVIDER_ACCESS_POLICY || DEFAULT_PROVIDER_ACCESS_POLICY_ID;
   const existing = await medplum.readResource('AccessPolicy', id);
 
-  const hasConsent = existing.resource?.some((r) => r.resourceType === 'Consent');
-  if (hasConsent) {
+  const consentEntry = existing.resource?.find((r) => r.resourceType === 'Consent');
+  if (consentEntry && consentEntry.interaction?.includes('create')) {
     return existing;
   }
 
   const desired = {
     ...existing,
     resource: [
-      ...(existing.resource || []),
+      ...(existing.resource || []).filter((r) => r.resourceType !== 'Consent'),
       {
         resourceType: 'Consent',
-        interaction: ['read', 'search', 'history', 'vread'],
+        interaction: ['create', 'read', 'update', 'search', 'history', 'vread'],
       },
     ],
   };
@@ -699,8 +909,41 @@ async function ensurePayerRosterAccessPolicy(medplum) {
         interaction: ['read', 'search', 'history', 'vread'],
       },
       {
+        resourceType: 'MedicationRequest',
+        criteria: 'MedicationRequest?_compartment=%roster_group',
+        interaction: ['read', 'search', 'history', 'vread'],
+      },
+      {
+        resourceType: 'AllergyIntolerance',
+        criteria: 'AllergyIntolerance?_compartment=%roster_group',
+        interaction: ['read', 'search', 'history', 'vread'],
+      },
+      {
+        resourceType: 'Coverage',
+        criteria: 'Coverage?_compartment=%roster_group',
+        interaction: ['read', 'search', 'history', 'vread'],
+      },
+      {
+        resourceType: 'DiagnosticReport',
+        criteria: 'DiagnosticReport?_compartment=%roster_group',
+        interaction: ['read', 'search', 'history', 'vread'],
+      },
+      {
+        resourceType: 'ServiceRequest',
+        criteria: 'ServiceRequest?_compartment=%roster_group',
+        interaction: ['read', 'search', 'history', 'vread'],
+      },
+      {
+        resourceType: 'ClientApplication',
+        interaction: ['read', 'search', 'history', 'vread'],
+      },
+      {
         resourceType: 'Group',
         interaction: ['read', 'search', 'history', 'vread'],
+      },
+      {
+        resourceType: 'AuditEvent',
+        interaction: ['create', 'read', 'search', 'history', 'vread'],
       },
     ],
   };
@@ -744,11 +987,19 @@ async function deleteDemoResourcesByType(client, resourceType) {
   console.log(`    deleted ${count} ${resourceType}`);
 }
 
-async function resetDemoData(client) {
+async function resetDemoData(client, adminClient) {
   console.log('Resetting Nevada HIE demo data...');
   // Delete in reverse dependency order.
-  await deleteDemoResourcesByType(client, 'ProjectMembership');
+  // ProjectMembership deletion requires admin privileges; use the admin client when available.
+  if (adminClient) {
+    await deleteDemoResourcesByType(adminClient, 'ProjectMembership');
+  } else {
+    await deleteDemoResourcesByType(client, 'ProjectMembership');
+  }
   await deleteDemoResourcesByType(client, 'Encounter');
+  await deleteDemoResourcesByType(client, 'Observation');
+  await deleteDemoResourcesByType(client, 'MedicationRequest');
+  await deleteDemoResourcesByType(client, 'Condition');
   await deleteDemoResourcesByType(client, 'Consent');
   await deleteDemoResourcesByType(client, 'Patient');
   await deleteDemoResourcesByType(client, 'Group');
@@ -769,21 +1020,6 @@ async function main() {
   const projectId = process.env.MEDPLUM_PROJECT_ID || DEFAULT_PROJECT_ID;
   console.log(`  target project: ${projectId}`);
 
-  if (args.reset) {
-    if (args.dryRun) {
-      console.log('  would delete demo resources tagged with:');
-      console.log(`    identifier system: ${DEMO_TAG_SYSTEM}`);
-      console.log('  resource types: ProjectMembership, Encounter, Consent, Patient, Group, Organization');
-      console.log('\nReset done (dry-run).');
-      return;
-    }
-    const rawResourceClient = await createResourceClientFromEnv();
-    const resourceClient = wrapWithRateLimitRetry(rawResourceClient, 'resource');
-    await resetDemoData(resourceClient);
-    console.log('\nReset done.');
-    return;
-  }
-
   const rawResourceClient = await createResourceClientFromEnv();
   const resourceClient = wrapWithRateLimitRetry(rawResourceClient, 'resource');
 
@@ -794,6 +1030,19 @@ async function main() {
     console.log('  admin client: authenticated');
   } else {
     console.log('  admin client: not provided (user creation will be skipped)');
+  }
+
+  if (args.reset) {
+    if (args.dryRun) {
+      console.log('  would delete demo resources tagged with:');
+      console.log(`    identifier system: ${DEMO_TAG_SYSTEM}`);
+      console.log('  resource types: ProjectMembership, Encounter, Consent, Patient, Group, Organization');
+      console.log('\nReset done (dry-run).');
+      return;
+    }
+    await resetDemoData(resourceClient, adminClient);
+    console.log('\nReset done.');
+    return;
   }
 
   // 1. Organizations
@@ -819,6 +1068,7 @@ async function main() {
   if (adminClient) {
     providerAlex = await ensureUser(adminClient, 'providerAlex', 'provider', `AccessPolicy/${providerAccessPolicy.id}`, undefined);
     providerJordan = await ensureUser(adminClient, 'providerJordan', 'provider', `AccessPolicy/${providerAccessPolicy.id}`, undefined);
+    await ensureUser(adminClient, 'adminNevada', 'admin', `AccessPolicy/${providerAccessPolicy.id}`, undefined);
   } else if (args.dryRun) {
     providerAlex = { email: DEMO_USERS.providerAlex.email, status: 'would create (admin creds not provided)' };
     providerJordan = { email: DEMO_USERS.providerJordan.email, status: 'would create (admin creds not provided)' };
@@ -838,17 +1088,35 @@ async function main() {
     [HIGH_DESERT_HEALTH_ID]: highDesertGroup.id,
   };
 
-  // 5. Patients, Consents, Encounters, and Group membership
-  console.log('\n5. Ensuring patients, consents, and encounters...');
+  // 5. Patients, Consents, Encounters, Conditions, Medications, Observations, and Group membership
+  console.log('\n5. Ensuring patients, consents, encounters, and care-gap resources...');
   const patientCount = 100;
   const silverStateMembers = [];
   const highDesertMembers = [];
+
+  // Reserve two Silver State patients for care-gap examples:
+  // index 10: diabetic patient overdue for A1C (no recent Observation)
+  // index 12: chronic medication patient overdue for refill
+  const careGapDiabetesIndex = 10;
+  const careGapRefillIndex = 12;
 
   for (let i = 0; i < patientCount; i++) {
     const patient = await ensurePatient(resourceClient, i, payerGroupRefs);
     const status = demoPatientConsentStatus(i);
     await ensureConsent(resourceClient, patient, status, i, payerGroupRefs);
     await ensureEncounter(resourceClient, patient, i, payerGroupRefs);
+
+    // Seed care-gap examples for the Silver State roster.
+    if (i === careGapDiabetesIndex && payerForPatient(i) === SILVER_STATE_PLAN_ID) {
+      await ensureCondition(resourceClient, patient, i, payerGroupRefs, '73211009', 'Diabetes mellitus type 2');
+      // No recent A1C observation → gap flagged.
+      const staleA1cDate = new Date('2025-01-01T00:00:00.000Z');
+      await ensureObservation(resourceClient, patient, i, payerGroupRefs, '4548-4', 'Hemoglobin A1c', 7.8, '%', staleA1cDate.toISOString());
+    }
+
+    if (i === careGapRefillIndex && payerForPatient(i) === SILVER_STATE_PLAN_ID) {
+      await ensureMedicationRequest(resourceClient, patient, i, payerGroupRefs, 'Lisinopril 10 mg tablet');
+    }
 
     const payerId = payerForPatient(i);
     const memberEntry = { entity: { reference: `Patient/${patient.id}`, display: patient.name?.[0]?.family } };
