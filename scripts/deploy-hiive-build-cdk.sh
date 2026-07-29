@@ -42,7 +42,7 @@ case "$action" in
     npx cdk deploy -c config="$config_file" --require-approval never
     ;;
   describe)
-    node packages/cli/dist/cjs/index.cjs aws describe build
+    npm --workspace @medplum/cli run medplum -- aws describe build
     ;;
   *)
     echo "Usage: bash ./scripts/deploy-hiive-build-cdk.sh [synth|diff|deploy|describe]" >&2
