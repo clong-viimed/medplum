@@ -1,3 +1,4 @@
+import type { Patient } from '@medplum/fhirtypes';
 // SPDX-FileCopyrightText: Copyright Orangebot, Inc. and Medplum contributors
 // SPDX-License-Identifier: Apache-2.0
 import type { AppShellHeaderConfiguration, AppShellNavbarConfiguration } from '@mantine/core';
@@ -29,6 +30,7 @@ export interface AppShellProps {
   readonly layoutVersion?: 'v1' | 'v2';
   readonly showLayoutVersionToggle?: boolean;
   readonly spotlightPatientsOnly?: boolean;
+  readonly spotlightPatientSearch?: (query: string) => Promise<Patient[]>;
 }
 
 export function AppShell(props: AppShellProps): JSX.Element {
@@ -88,6 +90,7 @@ export function AppShell(props: AppShellProps): JSX.Element {
         opened={navbarOpen}
         spotlightEnabled={true}
         patientsOnly={props.spotlightPatientsOnly}
+        patientSearch={props.spotlightPatientSearch}
         userMenuEnabled={true}
         version={props.version}
         showLayoutVersionToggle={props.showLayoutVersionToggle}
@@ -127,6 +130,7 @@ export function AppShell(props: AppShellProps): JSX.Element {
           displayAddBookmark={props.displayAddBookmark}
           resourceTypeSearchDisabled={props.resourceTypeSearchDisabled}
           patientsOnly={props.spotlightPatientsOnly}
+          patientSearch={props.spotlightPatientSearch}
         />
       ) : undefined;
   }

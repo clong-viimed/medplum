@@ -20,6 +20,7 @@ export type HeaderSearchTypes = Patient | ServiceRequest;
 
 export interface SpotlightProps {
   readonly patientsOnly?: boolean;
+  readonly patientSearch?: (query: string) => Promise<Patient[]>;
 }
 
 interface SearchGraphQLResponse {
@@ -43,7 +44,7 @@ function KeyboardHint(): JSX.Element {
   );
 }
 
-export function Spotlight({ patientsOnly }: SpotlightProps): JSX.Element {
+export function Spotlight({ patientsOnly, patientSearch }: SpotlightProps): JSX.Element {
   const medplum = useMedplum();
   const navigate = useMedplumNavigate();
   const [nothingFoundMessage, setNothingFoundMessage] = useState<React.ReactNode>(<KeyboardHint />);
@@ -52,7 +53,12 @@ export function Spotlight({ patientsOnly }: SpotlightProps): JSX.Element {
   const debouncedSearch = useDebouncedCallback((query: string) => {
     const graphqlQuery = buildGraphQLQuery(query);
 
-    if (patientsOnly) {
+    if (patientSearch) {
+      patientSearch(query)
+        .then((patients) => setActions(patientsToActions(patients, navigate)))
+        .catch(console.error)
+        .finally(() => setNothingFoundMessage('No results found'));
+    } else if (patientsOnly) {
       // Only search patients
       medplum
         .graphql(graphqlQuery)

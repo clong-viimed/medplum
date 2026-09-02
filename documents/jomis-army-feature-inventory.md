@@ -538,7 +538,7 @@ This estimate assumes:
 - 2 strong full-stack developers working mostly full time
 - heavy use of context engineering for requirements synthesis, code generation, scaffolding, and test support
 - Medplum is used as the core FHIR platform rather than building a new backend
-- CAC is implemented through an existing enterprise identity broker
+- CAC is implemented through an existing enterprise identity broker (federated IdP chain), not a custom auth mediator
 - the MVP excludes QR field transfer, environmental modules, and offline behavior
 - the MVP still includes Army-specific clinical workflow fidelity, including ADTMC, queueing, and military forms
 - no separate dedicated QA, product, or UX headcount is assumed; that risk stays inside the range
@@ -550,6 +550,12 @@ Acceleration assumptions for the revised estimate below:
 - The prior EHR source code exists and can be used for behavior reference immediately.
 - The prior EHR source code has not yet been audited for direct portability, so the revised ranges assume `reference-first reuse`, not guaranteed lift-and-shift reuse.
 - If legacy assets include structured ADTMC logic, print templates, and routing/state definitions, some slices may outperform the revised range.
+- Additional CAC, ADTMC, SF600, and deployment/location modeling guidance has reduced architecture ambiguity for auth, decision runtime boundaries, form rendering approach, and military hierarchy modeling.
+
+CAC-specific timeline rule used in this estimate:
+
+- If CAC is implemented through a federated IdP chain (recommended), auth timeline improves modestly and critical-path auth risk is reduced.
+- If CAC is implemented using custom reverse-proxy mTLS plus custom token-mediator code, use the prior auth ranges (or add approximately 1-3 weeks for hardening and security review).
 
 ## Slice-By-Slice Effort Estimate
 
@@ -559,17 +565,17 @@ The ranges below are elapsed implementation ranges for a 2-developer team. Sever
 
 | Slice | Scope | Medplum Fit | Base 2 Dev Range | Revised 2 Dev Range | Base 4 Dev Range | Revised 4 Dev Range | Likely Asset Acceleration | Notes |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Government access, auth, CAC broker integration, role-based access shell | Hybrid | 2-4 weeks | 2-3 weeks | 1.5-3 weeks | 1.5-2.5 weeks | Low to Medium | Legacy code helps with role behavior and warning-screen parity more than CAC itself |
+| 1 | Government access, auth, CAC broker integration, role-based access shell | Hybrid | 2-4 weeks | 1.5-2.5 weeks | 1.5-3 weeks | 1-2 weeks | Low to Medium | Revised ranges assume federated IdP CAC; custom mediator likely reverts to prior range |
 | 2 | Army demographics, identifiers, patient search, configurable intake model | Hybrid | 2-4 weeks | 1.5-3 weeks | 1.5-3 weeks | 1-2.5 weeks | Medium | Existing field definitions and prior patient screens should reduce discovery time |
 | 3 | Unknown patient rapid intake and identity reconciliation baseline | Hybrid | 1-2 weeks | 1-1.5 weeks | 1-1.5 weeks | 0.75-1.25 weeks | Medium | Good legacy flow examples should keep this small |
 | 4 | Patient chart and longitudinal record views | Hybrid | 3-5 weeks | 2.5-4 weeks | 2-4 weeks | 2-3.5 weeks | Medium | Legacy chart layout and section behavior reduce product/design churn |
 | 5 | Encounter workspace, SOAP note model, visit types, checklists, autosave, discharge/sign-close | Custom | 5-8 weeks | 4-6.5 weeks | 4-7 weeks | 3.5-5.5 weeks | Medium | Prior workflow code and screen behavior should reduce iteration but not remove major UI work |
-| 6 | ADTMC engine, branching runtime, disposition outcomes, provider routing side effects | Custom | 8-14 weeks | 6-11 weeks | 6-12 weeks | 5-9 weeks | Medium to High | Biggest gain if prior logic is structured; smaller gain if only PDFs and imperative UI code exist |
+| 6 | ADTMC engine, branching runtime, disposition outcomes, provider routing side effects | Custom | 8-14 weeks | 5.5-10 weeks | 6-12 weeks | 4.5-8.5 weeks | Medium to High | Blueprint clarity lowers design churn; biggest gain if prior logic is structured |
 | 7 | Provider queue, claim workflow, diagnosis, plan, differential management | Custom | 3-5 weeks | 2.5-4 weeks | 2-4 weeks | 2-3.5 weeks | Medium | Legacy routing and provider workflow logic should help materially |
 | 8 | Orders, order sets, technician queues, lab/radiology/pharmacy task routing | Hybrid | 4-7 weeks | 3-5.5 weeks | 3-5.5 weeks | 2.5-4.5 weeks | Medium | Existing order flow and queue logic should compress behavior discovery |
 | 9 | Pharmacy fulfillment and label-print baseline | Hybrid | 2-4 weeks | 1.5-3 weeks | 1.5-3 weeks | 1.5-2.5 weeks | Medium | Existing label content and fulfillment states matter more than Medplum docs |
-| 10 | Military forms and encounter reporting outputs | Custom | 4-7 weeks | 3-5.5 weeks | 3-6 weeks | 2.5-4.5 weeks | Medium to High | Big acceleration if old templates and field maps are directly reusable |
-| 11 | Minimum admin console to operate the MVP | Hybrid | 3-5 weeks | 2.5-4 weeks | 2-4 weeks | 2-3.5 weeks | Low to Medium | Legacy admin surfaces clarify requirements but still need redesign in Medplum |
+| 10 | Military forms and encounter reporting outputs | Custom | 4-7 weeks | 2.5-4.5 weeks | 3-6 weeks | 2-4 weeks | Medium to High | SF600 mapping guidance lowers uncertainty; strong gain if old templates and field maps are reusable |
+| 11 | Minimum admin console to operate the MVP | Hybrid | 3-5 weeks | 2-3.5 weeks | 2-4 weeks | 1.5-3 weeks | Low to Medium | Deployment/location modeling guidance reduces admin data-model discovery time |
 | 12 | End-to-end hardening, test coverage, bug fixing, pilot readiness | Custom | 4-6 weeks | 3.5-5.5 weeks | 3-5 weeks | 3-4.5 weeks | Low | Documentation and old code help, but integration QA remains real work |
 
 ### Phase 1 2-Developer Range
@@ -579,8 +585,8 @@ The ranges below are elapsed implementation ranges for a 2-developer team. Sever
 
 ### Phase 1 Revised 2-Developer Range With Legacy Asset Leverage
 
-- Best credible range: 18-28 weeks
-- More conservative range: 22-32 weeks
+- Best credible range: 16-26 weeks
+- More conservative range: 20-30 weeks
 
 ### Phase 1 4-Developer Range
 
@@ -589,8 +595,8 @@ The ranges below are elapsed implementation ranges for a 2-developer team. Sever
 
 ### Phase 1 Revised 4-Developer Range With Legacy Asset Leverage
 
-- Best credible range: 12-22 weeks
-- More conservative range: 14-26 weeks
+- Best credible range: 10-19 weeks
+- More conservative range: 12-23 weeks
 
 Interpretation:
 
@@ -614,7 +620,7 @@ Reason the total is not just the sum of the rows:
 | 16 | Heat stress module | Custom | 3-5 weeks | 2.5-4 weeks | 2-4 weeks | 2-3.5 weeks | Medium | Smaller custom domain with likely reusable forms and reports |
 | 17 | Environmental inventory and assignment workflows | Hybrid | 2-4 weeks | 1.5-3 weeks | 1.5-3 weeks | 1.5-2.5 weeks | Medium | Likely to benefit from existing workflows and field definitions |
 | 18 | Offline/disconnected architecture and sync model | Custom | 8-16 weeks | 7-14 weeks | 6-12 weeks | 5.5-10.5 weeks | Low to Medium | Old implementation may clarify requirements but is unlikely to port cleanly |
-| 19 | Expanded admin configurability and no-code operations layer | Custom | 4-8 weeks | 3-6.5 weeks | 3-6 weeks | 2.5-5 weeks | Medium | Legacy admin semantics help but do not eliminate platform redesign |
+| 19 | Expanded admin configurability and no-code operations layer | Custom | 4-8 weeks | 2.5-5.5 weeks | 3-6 weeks | 2-4.5 weeks | Medium | Deployment/structure/location model clarity reduces part of configuration-surface churn |
 
 ### Phase 2 2-Developer Range
 
@@ -623,8 +629,8 @@ Reason the total is not just the sum of the rows:
 
 ### Phase 2 Revised 2-Developer Range With Legacy Asset Leverage
 
-- Without offline/disconnected support: 15-25 weeks
-- With offline/disconnected support: 22-39 weeks
+- Without offline/disconnected support: 14-24 weeks
+- With offline/disconnected support: 21-38 weeks
 
 ### Phase 2 4-Developer Range
 
@@ -633,8 +639,8 @@ Reason the total is not just the sum of the rows:
 
 ### Phase 2 Revised 4-Developer Range With Legacy Asset Leverage
 
-- Without offline/disconnected support: 10-18 weeks
-- With offline/disconnected support: 15-28 weeks
+- Without offline/disconnected support: 9-17 weeks
+- With offline/disconnected support: 14-27 weeks
 
 ## Native Vs Custom Summary
 
@@ -691,15 +697,18 @@ For the scope you just set, the most realistic planning number for a 2-developer
 
 With the currently known acceleration inputs, a more aggressive but still credible planning number is:
 
-- Phase 1 Army clinical MVP: 4.5-7.5 months
-- Phase 2 without offline: add 3.5-6 months
-- Phase 2 with offline: add 5-9 months
+- Phase 1 Army clinical MVP: 3.75-6.75 months
+- Phase 2 without offline: add 3.25-5.75 months
+- Phase 2 with offline: add 4.75-8.5 months
 
 That puts full delivery at:
 
-- MVP only: roughly 24-40 weeks
-- MVP plus deferred phase 2, excluding offline: roughly 43-72 weeks total
-- MVP plus deferred phase 2, including offline: roughly 52-86 weeks total
+- Base assumption, MVP only: roughly 24-40 weeks
+- Base assumption, MVP plus deferred phase 2 excluding offline: roughly 43-72 weeks total
+- Base assumption, MVP plus deferred phase 2 including offline: roughly 52-86 weeks total
+- Revised assumption with current acceleration inputs and federated IdP CAC, MVP only: roughly 16-30 weeks
+- Revised assumption with current acceleration inputs and federated IdP CAC, MVP plus deferred phase 2 excluding offline: roughly 30-54 weeks total
+- Revised assumption with current acceleration inputs and federated IdP CAC, MVP plus deferred phase 2 including offline: roughly 37-68 weeks total
 
 ### 4-Developer Recommendation
 
@@ -714,9 +723,18 @@ Assumed 4-developer split:
 
 ### Practical 4-Developer Planning Number
 
-- MVP only: roughly 3-5 months
-- MVP plus phase 2 without offline: roughly 5.5-9 months total
-- MVP plus phase 2 with offline: roughly 7-12 months total
+- MVP only: roughly 2.5-4.5 months
+- MVP plus phase 2 without offline: roughly 5-8.5 months total
+- MVP plus phase 2 with offline: roughly 6.25-11 months total
+
+Equivalent week ranges for 4 developers:
+
+- Base assumption, MVP only: roughly 16-30 weeks
+- Base assumption, MVP plus deferred phase 2 excluding offline: roughly 28-52 weeks total
+- Base assumption, MVP plus deferred phase 2 including offline: roughly 34-64 weeks total
+- Revised assumption with current acceleration inputs and federated IdP CAC, MVP only: roughly 10-23 weeks
+- Revised assumption with current acceleration inputs and federated IdP CAC, MVP plus deferred phase 2 excluding offline: roughly 20-40 weeks total
+- Revised assumption with current acceleration inputs and federated IdP CAC, MVP plus deferred phase 2 including offline: roughly 25-51 weeks total
 
 ### Why 4 Developers Does Not Cut The Schedule In Half
 
@@ -731,6 +749,133 @@ Assumed 4-developer split:
 - If ADTMC source assets are only PDFs or UI-bound old code, the 4-developer benefit compresses less than expected.
 - If military forms require exact fidelity and many exception paths, reporting/output can stay on the critical path longer.
 - If role and routing semantics are not locked early, additional developers can create parallel rework rather than acceleration.
+
+## ADTMC Implementation Blueprint
+
+This section defines an executable blueprint for building ADTMC on Medplum in a way that is deterministic, auditable, and compatible with military workflow expectations.
+
+### Design Principles
+
+- Keep algorithm definition separate from algorithm execution.
+- Keep question capture separate from disposition routing side effects.
+- Ensure the same inputs always produce the same disposition.
+- Persist a full decision trace for quality review and legal defensibility.
+- Version every protocol artifact and make old versions replayable.
+
+### Recommended Architecture
+
+1. Definition layer: protocol metadata and references in PlanDefinition.
+2. Interaction layer: medic-facing triage questions in Questionnaire.
+3. Execution layer: deterministic rule evaluation in a Bot or rules service.
+4. Routing layer: disposition-driven Task creation and assignment.
+5. Documentation layer: ClinicalImpression plus encounter artifacts and printable outputs.
+
+### FHIR Resource Mapping
+
+- PlanDefinition: canonical algorithm identity, version, applicability metadata, and references to supporting artifacts.
+- Questionnaire: step-by-step triage flow shown to medics.
+- QuestionnaireResponse: captured triage answers for a specific encounter.
+- Observation: structured clinical signals used by the rule engine, such as red-flag vitals.
+- Encounter: active clinical context for the screening event.
+- ClinicalImpression: decision summary, rationale, and protocol adherence record.
+- Task: disposition routing to provider, specialty, or ancillary queue.
+- ServiceRequest: follow-on actions that represent an order or required clinical service.
+- DocumentReference: linked PDFs and supporting materials.
+
+### Canonical ADTMC Data Contract
+
+Every algorithm package should carry:
+
+- algorithm_id: stable canonical id
+- algorithm_version: semantic version
+- effective_start and effective_end dates
+- owning_authority and approval status
+- question set and answer options
+- deterministic branch rules
+- disposition mapping table
+- required follow-on actions per disposition
+- printable/reportable summary fields
+
+### Runtime Flow
+
+1. Medic starts encounter and selects protocol.
+2. App loads Questionnaire tied to the selected PlanDefinition.
+3. Medic completes screening questions and vitals capture.
+4. Bot evaluates QuestionnaireResponse and related Observations.
+5. Bot writes a disposition result with trace details.
+6. Bot creates or updates Task resources for required handoff.
+7. Bot writes ClinicalImpression linking encounter, protocol, and outcome.
+8. App updates queue views and encounter status based on disposition policy.
+
+### Disposition Routing Matrix
+
+At minimum, implement these outcomes as explicit routing policies:
+
+- Provider Now: immediate provider queue task, high priority.
+- IDEP Now: immediate IDEP queue task, high priority.
+- Specialty Referral: specialty queue task plus scheduling follow-up action.
+- Minor Care Protocols: co-sign workflow task and treatment path constraints.
+
+Each disposition policy should explicitly define:
+
+- target queue or assignee strategy
+- priority level and escalation timer
+- encounter state transition
+- required signatures and closure rules
+- mandatory documentation fields
+
+### Governance And Versioning
+
+- Do not edit active algorithms in place.
+- Publish new versions as new immutable artifacts.
+- Keep active, draft, and retired lifecycle states.
+- Store approval metadata and approver identity.
+- Support replay of historic cases against the exact version used at the time.
+
+### Security And Audit Requirements
+
+- Record algorithm id and version on each decision event.
+- Record actor, timestamp, and role for every disposition write.
+- Record manual override events with reason and supervisor attribution.
+- Restrict authoring and publishing permissions to approved roles.
+- Emit auditable event markers for queue creation, reassignment, and closure.
+
+### MVP Scope For ADTMC Slice
+
+- Build a protocol runner for the highest-impact algorithm set first.
+- Support the four core disposition outcomes.
+- Implement deterministic rule evaluation and trace persistence.
+- Implement provider queue routing and claim flow.
+- Implement ClinicalImpression summary output in encounter context.
+
+### Definition Of Done For ADTMC Slice
+
+- Medics can complete protocol flows end-to-end in the encounter workspace.
+- The same input bundle reproduces the same disposition in repeated runs.
+- Disposition creates correct Task routing and priority in all tested scenarios.
+- Provider handoff workflow is visible and actionable from queue to closure.
+- Decision trace is queryable for retrospective audit and QA review.
+- Protocol version used for each disposition is visible in the UI and API.
+
+### Key Risks And Mitigations
+
+- Risk: protocol logic only available as PDFs.
+- Mitigation: build a structured extraction template and dual-review translation process.
+
+- Risk: queue policy drift across facilities.
+- Mitigation: encode routing policy as configuration artifacts, not hardcoded UI logic.
+
+- Risk: non-deterministic outcomes from mixed UI and server rules.
+- Mitigation: make Bot evaluation authoritative and treat UI logic as guidance only.
+
+- Risk: late changes to disposition semantics.
+- Mitigation: freeze disposition contracts before broad parallelization of queue and forms work.
+
+### Timeline Impact Notes
+
+- If ADTMC source is structured and versioned, slice 6 can stay near the lower revised range.
+- If ADTMC source is PDF-only and needs manual translation, slice 6 moves toward the upper revised range.
+- If disposition contracts are finalized early, queue and forms slices can parallelize sooner.
 
 ## Initial Open Questions
 
@@ -757,3 +902,37 @@ The next pass should convert this inventory into a traceable matrix with one row
 - Open questions
 
 That matrix should become the canonical backlog input for implementation planning.
+
+## Internal Team Costing Summary
+
+Illustrative phase 1 MVP costing summary, aligned to the revised planning assumptions already documented above.
+
+This table is intentionally expressed in billable hours so you can multiply directly by your internal hourly rates.
+
+| Internal Team Function | 2 Dev Low Hours | 2 Dev High Hours | 4 Dev Low Hours | 4 Dev High Hours |
+|---|---|---|---|---|
+| Design | 120 | 200 | 160 | 240 |
+| Development | 1280 | 2400 | 1600 | 3680 |
+| Testing | 240 | 360 | 240 | 400 |
+| PM / Delivery Coordination | 80 | 160 | 120 | 200 |
+
+### Cost Formula
+
+For each scenario, calculate total cost as:
+
+- Total Cost = `(Design Hours x Design Hourly Rate) + (Development Hours x Development Hourly Rate) + (Testing Hours x Testing Hourly Rate) + (PM Hours x PM Hourly Rate)`
+
+Examples:
+
+- `2 Dev Low Total = (120 x design rate) + (1280 x development rate) + (240 x testing rate) + (80 x PM rate)`
+- `2 Dev High Total = (200 x design rate) + (2400 x development rate) + (360 x testing rate) + (160 x PM rate)`
+- `4 Dev Low Total = (160 x design rate) + (1600 x development rate) + (240 x testing rate) + (120 x PM rate)`
+- `4 Dev High Total = (240 x design rate) + (3680 x development rate) + (400 x testing rate) + (200 x PM rate)`
+
+Notes:
+
+- This is a summary cost model for phase 1 MVP only, not a replacement for the slice-by-slice estimate above.
+- It aligns most closely to the revised MVP assumption with legacy asset leverage and federated IdP CAC.
+- Hours are planning-grade effort equivalents, not strict sequential calendar spans.
+- Development hours can increase with a 4-developer team because elapsed schedule compresses, but total labor can rise due to parallel execution and integration overhead.
+- If you want a fully loaded budget, add any separate design, QA, compliance, security review, or infrastructure cost that is not already embedded in your hourly rates.

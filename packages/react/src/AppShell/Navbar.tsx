@@ -13,7 +13,7 @@ import {
 } from '@mantine/core';
 import { spotlight } from '@mantine/spotlight';
 import { formatHumanName } from '@medplum/core';
-import type { ResourceType } from '@medplum/fhirtypes';
+import type { Patient, ResourceType } from '@medplum/fhirtypes';
 import { useMedplumNavigate, useMedplumProfile, useNotificationCount } from '@medplum/react-hooks';
 import { IconBookmark, IconCirclePlus, IconLayoutSidebar, IconSearch, IconX } from '@tabler/icons-react';
 import type { JSX, MouseEvent, MouseEventHandler, ReactNode, SyntheticEvent } from 'react';
@@ -58,6 +58,7 @@ export interface NavbarProps {
   readonly closeNavbar: () => void;
   readonly spotlightEnabled?: boolean;
   readonly patientsOnly?: boolean;
+  readonly patientSearch?: (query: string) => Promise<Patient[]>;
   readonly userMenuEnabled?: boolean;
   readonly displayAddBookmark?: boolean;
   readonly resourceTypeSearchDisabled?: boolean;
@@ -121,6 +122,7 @@ export function Navbar(props: NavbarProps): JSX.Element {
               </Box>
             )}
             {props.spotlightEnabled && <Spotlight patientsOnly={props.patientsOnly} />}
+                        {props.spotlightEnabled && <Spotlight patientsOnly={props.patientsOnly} patientSearch={props.patientSearch} />}
             {!props.resourceTypeSearchDisabled && (
               <MantineAppShell.Section mb="sm">
                 <ResourceTypeInput

@@ -1,16 +1,16 @@
 {
   "version": "53.0.0",
   "files": {
-    "d26c79e0615a24e39b14dbcc5f2f3dbf197a29affbf39d81fe23f6c40dc7bd84": {
+    "68c6ae26b30189a27226a9710a1b28cb77cf34d5da434ffc1189e6126a426861": {
       "displayName": "MedplumBuild Template",
       "source": {
         "path": "MedplumBuild.template.json",
         "packaging": "file"
       },
       "destinations": {
-        "476905305808-us-east-1-5bf93044": {
+        "476905305808-us-east-1-d7752819": {
           "bucketName": "cdk-hnb659fds-assets-476905305808-us-east-1",
-          "objectKey": "d26c79e0615a24e39b14dbcc5f2f3dbf197a29affbf39d81fe23f6c40dc7bd84.json",
+          "objectKey": "68c6ae26b30189a27226a9710a1b28cb77cf34d5da434ffc1189e6126a426861.json",
           "region": "us-east-1",
           "assumeRoleArn": "arn:${AWS::Partition}:iam::476905305808:role/cdk-hnb659fds-file-publishing-role-476905305808-us-east-1"
         }

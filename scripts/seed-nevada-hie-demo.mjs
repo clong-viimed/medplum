@@ -14,6 +14,7 @@
 //      node scripts/seed-nevada-hie-demo.mjs
 
 import { ClientStorage, MedplumClient, MemoryStorage, normalizeErrorString } from '@medplum/core';
+import { pathToFileURL } from 'node:url';
 import { TextDecoder, TextEncoder } from 'node:util';
 
 const DEFAULT_BASE_URL = 'https://api.ehr.hiivehealth.net/';
@@ -85,11 +86,12 @@ function parseArgs(argv) {
     dryRun: argv.includes('--dry-run'),
     help: argv.includes('--help'),
     reset: argv.includes('--reset'),
+    recreateUsers: argv.includes('--recreate-users'),
   };
 }
 
 function printHelp() {
-  console.log(`Usage: node scripts/seed-nevada-hie-demo.mjs [--dry-run] [--reset] [--help]
+  console.log(`Usage: node scripts/seed-nevada-hie-demo.mjs [--dry-run] [--reset] [--recreate-users] [--help]
 
 Seeds the Nevada HIE demo using native Medplum resources only.
 
@@ -106,6 +108,7 @@ Environment:
 Examples:
   MEDPLUM_CLIENT_ID=... MEDPLUM_CLIENT_SECRET=... node scripts/seed-nevada-hie-demo.mjs --dry-run
   MEDPLUM_CLIENT_ID=... MEDPLUM_CLIENT_SECRET=... MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD=medplum_admin node scripts/seed-nevada-hie-demo.mjs
+  MEDPLUM_EMAIL=admin@example.com MEDPLUM_PASSWORD=medplum_admin node scripts/seed-nevada-hie-demo.mjs --recreate-users
   MEDPLUM_CLIENT_ID=... MEDPLUM_CLIENT_SECRET=... node scripts/seed-nevada-hie-demo.mjs --reset
 `);
 }
@@ -158,6 +161,7 @@ async function createResourceClientFromEnv() {
 
 async function createAdminClientFromEnv() {
   const baseUrl = process.env.MEDPLUM_BASE_URL || DEFAULT_BASE_URL;
+  const projectId = process.env.MEDPLUM_PROJECT_ID || DEFAULT_PROJECT_ID;
   const medplum = new MedplumClient({
     baseUrl,
     cacheTime: 0,
@@ -174,9 +178,23 @@ async function createAdminClientFromEnv() {
     scope: 'openid profile email',
     redirectUri: 'https://app.ehr.hiivehealth.net/',
   };
-  const loginResult = await medplum.startLogin(loginParams);
+  let loginResult = await medplum.startLogin(loginParams);
+  if (!loginResult.code && loginResult.memberships?.length) {
+    const membership = loginResult.memberships.find(
+      (candidate) => candidate.project?.reference === `Project/${projectId}`
+    );
+    if (!membership?.id) {
+      throw new Error(`No active ProjectMembership found for target project ${projectId}.`);
+    }
+    loginResult = await medplum.post('auth/profile', {
+      login: loginResult.login,
+      profile: membership.id,
+    });
+  }
   if (loginResult.code) {
     await medplum.processCode(loginResult.code, loginParams);
+  } else {
+    throw new Error(`Unable to complete login for target project ${projectId}.`);
   }
   return medplum;
 }
@@ -185,6 +203,30 @@ function demoIdentifier(value) {
   return {
     system: DEMO_TAG_SYSTEM,
     value,
+  };
+}
+
+export function getUserProvisioningDecision(error, { dryRun = false } = {}) {
+  const normalized = normalizeErrorString(error ?? 'Unknown error');
+  const unauthorized = /unauthorized|forbidden|403|not allowed|insufficient.*permission|user invite|projectmembership/i.test(normalized);
+
+  if (dryRun) {
+    return {
+      status: 'skip',
+      message: `Dry-run: skipping user provisioning because a privileged Medplum admin account is required. ${normalized}`,
+    };
+  }
+
+  if (unauthorized) {
+    return {
+      status: 'blocked',
+      message: `User provisioning is blocked by missing Medplum project permissions. Use a privileged Medplum admin account or create the demo users manually in the Medplum app before rerunning this script. Original error: ${normalized}`,
+    };
+  }
+
+  return {
+    status: 'error',
+    message: normalized,
   };
 }
 
@@ -820,6 +862,25 @@ async function ensureUser(adminClient, key, role, accessPolicyReferenceValue, gr
   return { email: user.email, status: existingMembership ? 'updated' : 'created', id: resultMembership.id, password };
 }
 
+async function recreateDemoUsers(adminClient) {
+  console.log('\nRecreating Nevada demo users...');
+  for (const [key, user] of Object.entries(DEMO_USERS)) {
+    const membershipIdentifier = `nevada-demo-membership-${key}`;
+    const membership = await adminClient.searchOne('ProjectMembership', {
+      identifier: `${DEMO_TAG_SYSTEM}|${membershipIdentifier}`,
+    });
+    const userReference = membership?.user;
+    if (membership?.id) {
+      await adminClient.deleteResource('ProjectMembership', membership.id);
+    }
+    if (userReference?.reference) {
+      const [resourceType, id] = userReference.reference.split('/');
+      await adminClient.deleteResource(resourceType, id);
+    }
+    console.log(`  ${user.email}: removed existing demo identity`);
+  }
+}
+
 async function ensureProfileRosterExtension(adminClient, membership, groupReference) {
   const profileRef = membership.profile;
   if (!profileRef?.reference) {
@@ -1016,12 +1077,10 @@ async function main() {
   console.log('Seeding Nevada HIE demo data...');
   console.log(`  dryRun: ${args.dryRun}`);
   console.log(`  reset: ${args.reset}`);
+  console.log(`  recreateUsers: ${args.recreateUsers}`);
 
   const projectId = process.env.MEDPLUM_PROJECT_ID || DEFAULT_PROJECT_ID;
   console.log(`  target project: ${projectId}`);
-
-  const rawResourceClient = await createResourceClientFromEnv();
-  const resourceClient = wrapWithRateLimitRetry(rawResourceClient, 'resource');
 
   let adminClient;
   if (process.env.MEDPLUM_EMAIL && process.env.MEDPLUM_PASSWORD) {
@@ -1030,6 +1089,19 @@ async function main() {
     console.log('  admin client: authenticated');
   } else {
     console.log('  admin client: not provided (user creation will be skipped)');
+  }
+
+  const hasResourceCredentials = Boolean(
+    process.env.MEDPLUM_ACCESS_TOKEN || (process.env.MEDPLUM_CLIENT_ID && process.env.MEDPLUM_CLIENT_SECRET)
+  );
+  const resourceClient = hasResourceCredentials
+    ? wrapWithRateLimitRetry(await createResourceClientFromEnv(), 'resource')
+    : adminClient;
+  if (!resourceClient) {
+    throw new Error('Set resource client credentials or MEDPLUM_EMAIL/MEDPLUM_PASSWORD for resource operations.');
+  }
+  if (!hasResourceCredentials) {
+    console.log('  resource client: using authenticated project admin');
   }
 
   if (args.reset) {
@@ -1043,6 +1115,17 @@ async function main() {
     await resetDemoData(resourceClient, adminClient);
     console.log('\nReset done.');
     return;
+  }
+
+  if (args.recreateUsers) {
+    if (!adminClient) {
+      throw new Error('Admin credentials are required to recreate demo users.');
+    }
+    if (args.dryRun) {
+      console.log('  would remove and recreate the five named Nevada demo user identities.');
+    } else {
+      await recreateDemoUsers(adminClient);
+    }
   }
 
   // 1. Organizations
@@ -1066,9 +1149,16 @@ async function main() {
   let payerSarah;
   let payerMiguel;
   if (adminClient) {
-    providerAlex = await ensureUser(adminClient, 'providerAlex', 'provider', `AccessPolicy/${providerAccessPolicy.id}`, undefined);
-    providerJordan = await ensureUser(adminClient, 'providerJordan', 'provider', `AccessPolicy/${providerAccessPolicy.id}`, undefined);
-    await ensureUser(adminClient, 'adminNevada', 'admin', `AccessPolicy/${providerAccessPolicy.id}`, undefined);
+    try {
+      providerAlex = await ensureUser(adminClient, 'providerAlex', 'provider', `AccessPolicy/${providerAccessPolicy.id}`, undefined);
+      providerJordan = await ensureUser(adminClient, 'providerJordan', 'provider', `AccessPolicy/${providerAccessPolicy.id}`, undefined);
+      await ensureUser(adminClient, 'adminNevada', 'admin', `AccessPolicy/${providerAccessPolicy.id}`, undefined);
+    } catch (err) {
+      const decision = getUserProvisioningDecision(err, { dryRun: args.dryRun });
+      console.log(`  ${decision.message}`);
+      providerAlex = providerAlex ?? { email: DEMO_USERS.providerAlex.email, status: `skipped (${decision.status})` };
+      providerJordan = providerJordan ?? { email: DEMO_USERS.providerJordan.email, status: `skipped (${decision.status})` };
+    }
   } else if (args.dryRun) {
     providerAlex = { email: DEMO_USERS.providerAlex.email, status: 'would create (admin creds not provided)' };
     providerJordan = { email: DEMO_USERS.providerJordan.email, status: 'would create (admin creds not provided)' };
@@ -1105,6 +1195,18 @@ async function main() {
     const status = demoPatientConsentStatus(i);
     await ensureConsent(resourceClient, patient, status, i, payerGroupRefs);
     await ensureEncounter(resourceClient, patient, i, payerGroupRefs);
+
+    // Seed clinical data for Jordan Riley (index 0) — primary demo patient used in Act 4.
+    if (i === 0) {
+      await ensureCondition(resourceClient, patient, 'jordan-riley-htn', payerGroupRefs, '38341003', 'Hypertension');
+      await ensureCondition(resourceClient, patient, 'jordan-riley-hyperlipidemia', payerGroupRefs, '55822004', 'Hyperlipidemia');
+      await ensureCondition(resourceClient, patient, 'jordan-riley-asthma', payerGroupRefs, '195967001', 'Asthma');
+      await ensureObservation(resourceClient, patient, 'jordan-riley-bp', payerGroupRefs, '55284-4', 'Blood pressure systolic and diastolic', 128, 'mm[Hg]', '2026-06-15T10:00:00.000Z');
+      await ensureObservation(resourceClient, patient, 'jordan-riley-cholesterol', payerGroupRefs, '2093-3', 'Cholesterol [Mass/volume] in Serum or Plasma', 195, 'mg/dL', '2026-05-20T08:30:00.000Z');
+      await ensureObservation(resourceClient, patient, 'jordan-riley-a1c', payerGroupRefs, '4548-4', 'Hemoglobin A1c', 5.6, '%', '2026-05-20T08:30:00.000Z');
+      await ensureMedicationRequest(resourceClient, patient, 'jordan-riley-lisinopril', payerGroupRefs, 'Lisinopril 10 mg tablet');
+      await ensureMedicationRequest(resourceClient, patient, 'jordan-riley-atorvastatin', payerGroupRefs, 'Atorvastatin 20 mg tablet');
+    }
 
     // Seed care-gap examples for the Silver State roster.
     if (i === careGapDiabetesIndex && payerForPatient(i) === SILVER_STATE_PLAN_ID) {
@@ -1145,16 +1247,26 @@ async function main() {
   // 7. Invite payer roster users and bind them to their groups via parameterized AccessPolicy
   console.log('\n7. Assigning payer users to roster groups...');
   if (adminClient) {
-    payerSarah = await ensureUser(adminClient, 'payerSarah', 'payer', `AccessPolicy/${payerAccessPolicy.id}`, {
-      reference: `Group/${silverStateGroup.id}`,
-      display: 'Silver State Plan Roster',
-    });
-    payerMiguel = await ensureUser(adminClient, 'payerMiguel', 'payer', `AccessPolicy/${payerAccessPolicy.id}`, {
-      reference: `Group/${highDesertGroup.id}`,
-      display: 'High Desert Health Roster',
-    });
-    for (const u of [payerSarah, payerMiguel]) {
-      console.log(`  ${u.email}: ${u.status}${u.password ? ` (password: ${u.password})` : ''}`);
+    try {
+      payerSarah = await ensureUser(adminClient, 'payerSarah', 'payer', `AccessPolicy/${payerAccessPolicy.id}`, {
+        reference: `Group/${silverStateGroup.id}`,
+        display: 'Silver State Plan Roster',
+      });
+      payerMiguel = await ensureUser(adminClient, 'payerMiguel', 'payer', `AccessPolicy/${payerAccessPolicy.id}`, {
+        reference: `Group/${highDesertGroup.id}`,
+        display: 'High Desert Health Roster',
+      });
+      for (const u of [payerSarah, payerMiguel]) {
+        console.log(`  ${u.email}: ${u.status}${u.password ? ` (password: ${u.password})` : ''}`);
+      }
+    } catch (err) {
+      const decision = getUserProvisioningDecision(err, { dryRun: args.dryRun });
+      console.log(`  ${decision.message}`);
+      payerSarah = payerSarah ?? { email: DEMO_USERS.payerSarah.email, status: `skipped (${decision.status})` };
+      payerMiguel = payerMiguel ?? { email: DEMO_USERS.payerMiguel.email, status: `skipped (${decision.status})` };
+      for (const u of [payerSarah, payerMiguel]) {
+        console.log(`  ${u.email}: ${u.status}${u.password ? ` (password: ${u.password})` : ''}`);
+      }
     }
   } else if (args.dryRun) {
     console.log('  skipped (admin creds not provided)');
@@ -1170,7 +1282,11 @@ async function main() {
 }
 
 const args = parseArgs(process.argv.slice(2));
-main().catch((error) => {
-  console.error(normalizeErrorString(error));
-  process.exitCode = 1;
-});
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  main().catch((error) => {
+    console.error(normalizeErrorString(error));
+    process.exitCode = 1;
+  });
+}

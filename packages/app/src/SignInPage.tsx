@@ -35,10 +35,10 @@ export function SignInPage(): JSX.Element {
       login={searchParams.get('login') || undefined}
       projectId={searchParams.get('project') || undefined}
     >
-      <Logo size={32} />
+      <img src="/img/hiive-health-logo-blue.svg" alt="Hiive Health" style={{ width: 200, marginBottom: 8 }} />
       {searchParams.get('project') !== 'new' && (
         <Title order={3} py="lg" ta="center">
-          Sign in to {getAppName()}
+          Sign in to Admin
         </Title>
       )}
       {searchParams.get('project') === 'new' && (

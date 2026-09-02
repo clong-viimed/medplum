@@ -58,7 +58,7 @@ export function ChooseProfileForm(props: ChooseProfileFormProps): JSX.Element {
   return (
     <Stack gap="0">
       <Flex justify="center" align="center" direction="column" wrap="nowrap">
-        <Logo size={32} />
+        <img src="/img/hiive-health-logo-blue.svg" alt="Hiive Health" style={{ width: 200, marginBottom: 8 }} />
         <Title order={3} py="lg">
           Choose a Project
         </Title>

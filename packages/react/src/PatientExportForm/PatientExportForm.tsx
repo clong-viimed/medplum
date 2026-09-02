@@ -7,7 +7,7 @@ import type { Patient, Reference } from '@medplum/fhirtypes';
 import { useMedplum } from '@medplum/react-hooks';
 import { IconCheck, IconX } from '@tabler/icons-react';
 import type { JSX } from 'react';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { DateTimeInput } from '../DateTimeInput/DateTimeInput';
 import { convertLocalToIso } from '../DateTimeInput/DateTimeInput.utils';
 import { Form } from '../Form/Form';
@@ -56,6 +56,7 @@ const formats: Record<string, FormatDefinition> = {
 export function PatientExportForm(props: PatientExportFormProps): JSX.Element {
   const medplum = useMedplum();
   const { patient } = props;
+  const [selectedFormat, setSelectedFormat] = useState<string>('everything');
 
   const handleSubmit = useCallback(
     async (data: Record<string, string>) => {
@@ -143,6 +144,8 @@ export function PatientExportForm(props: PatientExportFormProps): JSX.Element {
               { label: 'C-CDA Referral', value: 'ccdaReferral' },
             ]}
             fullWidth
+            value={selectedFormat}
+            onChange={setSelectedFormat}
           />
         </FormSection>
         <FormSection title="Author" description="Optional author for composition. Default value is current user.">
@@ -152,24 +155,30 @@ export function PatientExportForm(props: PatientExportFormProps): JSX.Element {
             targetTypes={['Organization', 'Practitioner', 'PractitionerRole']}
           />
         </FormSection>
-        <FormSection
-          title="Authored On"
-          description="Optional date for composition authored on. Default value is current date."
-        >
-          <DateTimeInput name="authoredOn" placeholder="Authored on" />
-        </FormSection>
-        <FormSection
-          title="Start Date"
-          description="The start date of care. If no start date is provided, all records prior to the end date are in scope."
-        >
-          <DateTimeInput name="startDate" placeholder="Start date" />
-        </FormSection>
-        <FormSection
-          title="End Date"
-          description="The end date of care. If no end date is provided, all records subsequent to the start date are in scope."
-        >
-          <DateTimeInput name="endDate" placeholder="End date" />
-        </FormSection>
+        {(selectedFormat === 'ccda' || selectedFormat === 'ccdaReferral' || selectedFormat === 'summary') && (
+          <FormSection
+            title="Authored On"
+            description="Optional date for composition authored on. Default value is current date."
+          >
+            <DateTimeInput name="authoredOn" placeholder="Authored on" />
+          </FormSection>
+        )}
+        {(selectedFormat === 'everything' || selectedFormat === 'summary') && (
+          <>
+            <FormSection
+              title="Start Date"
+              description="The start date of care. If no start date is provided, all records prior to the end date are in scope."
+            >
+              <DateTimeInput name="startDate" placeholder="Start date" />
+            </FormSection>
+            <FormSection
+              title="End Date"
+              description="The end date of care. If no end date is provided, all records subsequent to the start date are in scope."
+            >
+              <DateTimeInput name="endDate" placeholder="End date" />
+            </FormSection>
+          </>
+        )}
         <Group justify="right">
           <SubmitButton>Request Export</SubmitButton>
         </Group>
