@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "medplum": {
+      "type": "http",
+      "url": "https://api.medplum.com/mcp/stream"
+    }
+  }
+}
