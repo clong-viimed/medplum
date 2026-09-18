@@ -340,6 +340,18 @@ export class BackEnd extends Construct {
           resources: [`arn:aws:ssm:${region}:${accountNumber}:parameter/medplum/${name}/*`],
         }),
 
+        // ECS Exec: Open Systems Manager control and data channels for this task.
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            'ssmmessages:CreateControlChannel',
+            'ssmmessages:CreateDataChannel',
+            'ssmmessages:OpenControlChannel',
+            'ssmmessages:OpenDataChannel',
+          ],
+          resources: ['*'],
+        }),
+
         // SES: Send emails
         // https://docs.aws.amazon.com/ses/latest/dg/sending-authorization-policy-examples.html
         new iam.PolicyStatement({
