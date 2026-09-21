@@ -140,11 +140,10 @@ export const a01SoreThroatQuestionnaire: Questionnaire = {
     },
     {
       linkId: 'additional-screen',
-      text: 'Screen Cold, Skin, Ear Pain if present',
+      text: 'Screen Cold Symptoms, Ear Pain if present',
       type: 'group',
       item: [
         { linkId: 'cold-present', text: 'Cold present', type: 'choice', required: true, answerOption: BOOLEAN_ANSWER_OPTIONS },
-        { linkId: 'skin-condition-present', text: 'Skin condition present', type: 'choice', required: true, answerOption: BOOLEAN_ANSWER_OPTIONS },
         { linkId: 'ear-pain-present', text: 'Ear pain present', type: 'choice', required: true, answerOption: BOOLEAN_ANSWER_OPTIONS },
       ],
     },
@@ -160,7 +159,6 @@ const noInitialEscalation = [
 
 const additionalScreenCompleted = [
   { linkId: 'cold-present', operator: 'exists' as const },
-  { linkId: 'skin-condition-present', operator: 'exists' as const },
   { linkId: 'ear-pain-present', operator: 'exists' as const },
 ];
 
@@ -203,7 +201,7 @@ export const a01SoreThroatRuleTable: AdtmcRuleTable = {
         ...additionalScreenCompleted,
       ],
       disposition: 'minor-care-protocols',
-      guidance: 'Screen Cold, Skin, Ear Pain if present. Follow the MCP sore throat or MCP hoarseness treatment protocol.',
+      guidance: 'Screen Cold Symptoms, Ear Pain if present. Follow the MCP sore throat or MCP hoarseness treatment protocol.',
     },
     {
       id: 'minor-care-zero-to-two-strep-criteria',
@@ -213,7 +211,7 @@ export const a01SoreThroatRuleTable: AdtmcRuleTable = {
         ...additionalScreenCompleted,
       ],
       disposition: 'minor-care-protocols',
-      guidance: 'Screen Cold, Skin, Ear Pain if present. Follow the MCP sore throat or MCP hoarseness treatment protocol.',
+      guidance: 'Screen Cold Symptoms, Ear Pain if present. Follow the MCP sore throat or MCP hoarseness treatment protocol.',
     },
   ],
 };
@@ -278,7 +276,6 @@ export const a01SoreThroatPackage: AdtmcAlgorithmPackage = {
         'strep-criteria-count': 3,
         'rapid-strep-culture-result': 'negative',
         'cold-present': false,
-        'skin-condition-present': false,
         'ear-pain-present': false,
       },
       expectedDisposition: 'minor-care-protocols',
@@ -292,7 +289,6 @@ export const a01SoreThroatPackage: AdtmcAlgorithmPackage = {
         fever: false,
         'strep-criteria-count': 2,
         'cold-present': true,
-        'skin-condition-present': false,
         'ear-pain-present': false,
       },
       expectedDisposition: 'minor-care-protocols',
