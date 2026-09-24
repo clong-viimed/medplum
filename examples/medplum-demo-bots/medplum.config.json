@@ -137,6 +137,12 @@
       "id": "",
       "source": "src/spaces-bots/fhir-visualizer-bot.ts",
       "dist": "dist/spaces-bots/fhir-visualizer-bot.js"
+    },
+    {
+      "name": "adtmc-a01-sore-throat",
+      "id": "",
+      "source": "src/adtmc/a01-sore-throat-bot.ts",
+      "dist": "dist/adtmc/a01-sore-throat-bot.js"
     }
   ]
 }

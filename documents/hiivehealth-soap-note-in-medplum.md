@@ -1,6 +1,6 @@
 # Mimicking the HiiveHealth SOAP Note in Medplum
 
-Last updated: 2026-07-13
+Last updated: 2026-09-21
 
 ## Goal
 
@@ -179,7 +179,45 @@ Each SOAP section gets its own `Questionnaire`. This makes extraction mapping sm
 }
 ```
 
+#### ROS template catalog and searchable selection
+
+Replace the single fixed ROS form with a **three-template catalog** derived from [ROS Medplum.xlsx](ROS/ROS%20Medplum.xlsx). A clinician selects one template for an encounter; the selected template is then the only ROS Questionnaire rendered in that encounter's ROS card.
+
+| Catalog label | Source worksheet | Canonical URL suffix | Capture contract |
+|---|---|---|---|
+| ROS Brief - Normal | `ROS Brief - Normal` | `ros-brief-normal` | Seven configured fields. Each field offers `no`, `mild`, `moderate`, or `severe`; the source default is `no`. |
+| ROS Extended - Normal | `ROS Extended - Normal` | `ros-extended-normal` | Forty-four configured fields. Each field offers `no`, `mild`, `moderate`, or `severe`; the source default is `no`. |
+| ROS Unable to Obtain | `ROS Unable to Obtain` | `ros-unable-to-obtain` | One required reason selection: altered mental status, decreased level of consciousness, uncooperative behavior, or intubation. The source permits a blank initial value. |
+
+The Brief and Extended Auto Text Templates supply the complete clinical mappings used by their Questionnaires. Brief includes seven fields across Constitutional, Respiratory, and Cardiovascular. Extended includes forty-four fields across Constitutional, Skin, ENMT, Respiratory, Cardiovascular, Gastrointestinal, Genitourinary, Musculoskeletal, Neurologic, Psychiatric, Heme/Lymph, and Allergy/Immunologic.
+
+##### Clinician workflow
+
+1. In the ROS card, show a compact `ROS template` searchable combobox before any ROS questions.
+2. The combobox searches the three catalog labels and returns a constrained selection; it is not a free-text clinical-note field.
+3. Selecting a template creates or replaces the encounter's ROS `QuestionnaireResponse` with a `questionnaire` canonical matching that template. Require confirmation before replacing a response that already has answers.
+4. Render only the selected Questionnaire. Persist the selection immediately and debounce answer saves using the existing SOAP response flow.
+5. At signing, include the selected ROS `QuestionnaireResponse` in the SOAP `Composition` and extract the answers to the established ROS `Observation` representation.
+
+##### Resource and persistence contract
+
+- Create three active `Questionnaire` resources at `https://hiivehealth.com/questionnaire/ros-brief-normal`, `.../ros-extended-normal`, and `.../ros-unable-to-obtain`.
+- Give each a stable `name`, a human-readable `title` for catalog search only, and a `useContext` or extension identifying it as a SOAP ROS template.
+- Store the selected canonical URL in `QuestionnaireResponse.questionnaire`; this is the authoritative encounter-level template selection. Do not add a second free-text selector field to the response.
+- Keep a template-independent ROS card. It loads existing ROS responses by `encounter`, recognizes any of the three canonical URLs, and offers the catalog only when no ROS response exists or the clinician elects to replace it.
+- For Brief and Extended responses, represent each approved item as a coded choice answer with the source severity values. For Unable to Obtain, create one coded reason answer and do not create normal-system findings.
+- Update `extractSoapResponse()` to accept all three canonical URLs. Extraction must retain the selected template URL in its source/provenance context so a reviewer can distinguish a normal ROS from an unavailable ROS.
+
+##### Delivery slices and verification
+
+1. **Catalog and schema:** add the three Questionnaire definitions, catalog metadata, and an importer update. Verify each field against the workbook Auto Text Template before publication.
+2. **Selector UI:** replace the fixed ROS card with a searchable constrained combobox and template-aware renderer. Test search, selection, cancellation, and replacement confirmation.
+3. **Persistence and extraction:** load/save by selected canonical, extend extraction, and preserve template identity in signed output. Test all three Questionnaires, including an Unable to Obtain reason.
+4. **Clinical validation:** have a clinical owner approve every Brief/Extended label, grouping, default, and code before release. Verify a signed encounter contains exactly one selected ROS response and no contradictory normal and unavailable ROS findings.
+
 #### Objective questionnaire (vitals + physical exam)
+
+Vitals belong to the **Objective** section. The no-custom-UI baseline uses a `Vitals` group with unit choices and conditional decimal inputs. This keeps capture declarative FHIR while allowing a clinician to select the unit before entering a value.
 
 ```json
 {
@@ -189,18 +227,89 @@ Each SOAP section gets its own `Questionnaire`. This makes extraction mapping sm
   "title": "Objective",
   "status": "active",
   "item": [
-    { "linkId": "temperature", "type": "decimal", "text": "Temp (°F)" },
-    { "linkId": "heartRate", "type": "integer", "text": "HR (bpm)" },
-    { "linkId": "weight", "type": "decimal", "text": "Weight (lbs)" },
-    { "linkId": "height", "type": "decimal", "text": "Height (in)" },
-    { "linkId": "spO2", "type": "integer", "text": "SpO₂ (%)" },
-    { "linkId": "respiratoryRate", "type": "integer", "text": "RR (b/m)" },
-    { "linkId": "systolic", "type": "integer", "text": "SBP (mmHg)" },
-    { "linkId": "diastolic", "type": "integer", "text": "DBP (mmHg)" },
+    {
+      "linkId": "vitals",
+      "type": "group",
+      "text": "Vitals",
+      "item": [
+        {
+          "linkId": "temperature-unit",
+          "type": "choice",
+          "text": "Temperature unit",
+          "answerOption": [
+            { "valueCoding": { "system": "http://unitsofmeasure.org", "code": "[degF]", "display": "Fahrenheit (°F)" } },
+            { "valueCoding": { "system": "http://unitsofmeasure.org", "code": "Cel", "display": "Celsius (°C)" } }
+          ]
+        },
+        { "linkId": "temperature-f", "type": "decimal", "text": "Temp (°F)", "enableWhen": [{ "question": "temperature-unit", "operator": "=", "answerCoding": { "system": "http://unitsofmeasure.org", "code": "[degF]" } }] },
+        { "linkId": "temperature-c", "type": "decimal", "text": "Temp (°C)", "enableWhen": [{ "question": "temperature-unit", "operator": "=", "answerCoding": { "system": "http://unitsofmeasure.org", "code": "Cel" } }] },
+        { "linkId": "heart-rate", "type": "integer", "text": "HR (bpm)" },
+        {
+          "linkId": "weight-unit",
+          "type": "choice",
+          "text": "Weight unit",
+          "answerOption": [
+            { "valueCoding": { "system": "http://unitsofmeasure.org", "code": "[lb_av]", "display": "Pounds (lb)" } },
+            { "valueCoding": { "system": "http://unitsofmeasure.org", "code": "kg", "display": "Kilograms (kg)" } }
+          ]
+        },
+        { "linkId": "weight-lb", "type": "decimal", "text": "Weight (lb)", "enableWhen": [{ "question": "weight-unit", "operator": "=", "answerCoding": { "system": "http://unitsofmeasure.org", "code": "[lb_av]" } }] },
+        { "linkId": "weight-kg", "type": "decimal", "text": "Weight (kg)", "enableWhen": [{ "question": "weight-unit", "operator": "=", "answerCoding": { "system": "http://unitsofmeasure.org", "code": "kg" } }] },
+        {
+          "linkId": "height-unit",
+          "type": "choice",
+          "text": "Height unit",
+          "answerOption": [
+            { "valueCoding": { "system": "http://unitsofmeasure.org", "code": "[in_i]", "display": "Inches (in)" } },
+            { "valueCoding": { "system": "http://unitsofmeasure.org", "code": "cm", "display": "Centimeters (cm)" } }
+          ]
+        },
+        { "linkId": "height-in", "type": "decimal", "text": "Height (in)", "enableWhen": [{ "question": "height-unit", "operator": "=", "answerCoding": { "system": "http://unitsofmeasure.org", "code": "[in_i]" } }] },
+        { "linkId": "height-cm", "type": "decimal", "text": "Height (cm)", "enableWhen": [{ "question": "height-unit", "operator": "=", "answerCoding": { "system": "http://unitsofmeasure.org", "code": "cm" } }] },
+        { "linkId": "spO2", "type": "integer", "text": "SpO₂ (%)" },
+        { "linkId": "respiratory-rate", "type": "integer", "text": "RR (b/m)" },
+        { "linkId": "systolic", "type": "integer", "text": "SBP (mmHg)" },
+        { "linkId": "diastolic", "type": "integer", "text": "DBP (mmHg)" }
+      ]
+    },
     { "linkId": "physical-exam", "type": "text", "text": "Physical Examination" }
   ]
 }
 ```
+
+#### Vital layout and units
+
+The reference layout has a dense, multi-column vitals panel with a collapsible "Additional Vitals" area. That exact layout is **not guaranteed by Medplum's stock `QuestionnaireForm`**: standard FHIR `Questionnaire` defines the questions and conditional behavior, but does not require a renderer to honor a specific grid, panel color, or inline unit-toggle design.
+
+Use this decision rule:
+
+| Requirement | No-custom-UI approach | Custom-renderer approach |
+|---|---|---|
+| Capture Temp, HR, Weight, Height, SpO₂, RR, BP, glucose, or visual acuity | Native `Questionnaire` groups and items | Same `Questionnaire` contract |
+| Let the clinician select °F/°C, lb/kg, or in/cm | `choice` item plus `enableWhen` conditional decimal items | Segmented unit controls attached to one measurement input |
+| Store interoperable data | Extract to LOINC-coded `Observation.valueQuantity` with UCUM units | Same output contract |
+| Match the supplied compact grid and "Additional Vitals" disclosure | Not reliable across generic renderers | Required: purpose-built Vitals panel bound to the same `QuestionnaireResponse` or directly to `Observation`s |
+
+For the native-first path, the clinician chooses the unit before entering a value. The extractor reads the enabled answer, writes its selected UCUM unit, and should reject a response containing values in both alternatives for one measurement. Do not silently convert or retain a hidden alternate-unit value without an explicit conversion policy.
+
+The extracted `Observation` resources use standard LOINC and UCUM, for example:
+
+| Measurement | LOINC code | UCUM code |
+|---|---|---|
+| Body temperature | `8310-5` | `[degF]` or `Cel` |
+| Heart rate | `8867-4` | `/min` |
+| Body weight | `29463-7` | `[lb_av]` or `kg` |
+| Body height | `8302-2` | `[in_i]` or `cm` |
+| Oxygen saturation | `59408-5` | `%` |
+| Respiratory rate | `9279-1` | `/min` |
+| Systolic / diastolic blood pressure | `8480-6` / `8462-4` | `mm[Hg]` |
+
+### Vital-signs delivery plan
+
+1. **Native capture slice:** Replace the fixed-unit Objective fields with the `Vitals` group, conditional unit choices, and a separate optional `Additional Vitals` group. Verify that selecting each unit exposes only its matching value input.
+2. **Extraction slice:** Extend the SOAP extractor to emit LOINC-coded `Observation.valueQuantity` resources with the selected UCUM code. Reject conflicting alternate-unit answers and verify one Observation per populated vital.
+3. **Workflow validation slice:** Test an encounter with °F/lb/in and another with °C/kg/cm. Confirm the saved `QuestionnaireResponse`, extracted `Observation`s, and signed `Composition` retain the original selected units.
+4. **Layout decision slice:** Review the native renderer with clinicians. If the compact grid, inline unit toggles, and collapsible Additional Vitals panel are acceptance criteria, build one focused Vitals renderer while retaining the same FHIR contract and extraction tests.
 
 #### Assessment questionnaire
 
